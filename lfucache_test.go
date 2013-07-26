@@ -22,13 +22,13 @@ func TestExpiry(t *testing.T) {
 	c := lfucache.Create(3)
 
 	c.Insert("test1", 42) // usage=1
-	c.Access("test1") // usage=2
-	c.Access("test1") // usage=3
+	c.Access("test1")     // usage=2
+	c.Access("test1")     // usage=3
 
 	c.Insert("test2", 43) // usage=1
 
 	c.Insert("test3", 44) // usage=1
-	c.Access("test3") // usage=2
+	c.Access("test3")     // usage=2
 
 	if c.Access("test1").(int) != 42 {
 		t.Error("Didn't get the right value back from the cache (test1)")
@@ -65,17 +65,17 @@ func TestDelete(t *testing.T) {
 	c := lfucache.Create(3)
 
 	c.Insert("test1", 42) // usage=1
-	c.Access("test1") // usage=2
-	c.Access("test1") // usage=3
+	c.Access("test1")     // usage=2
+	c.Access("test1")     // usage=3
 
 	c.Insert("test2", 43) // usage=1
 
 	c.Insert("test3", 44) // usage=1
-	c.Access("test3") // usage=2
+	c.Access("test3")     // usage=2
 
 	c.Delete("test1")
 
-	if c.Access("test1") != nil{
+	if c.Access("test1") != nil {
 		t.Error("test1 was not deleted")
 	}
 
@@ -99,5 +99,42 @@ func TestDelete(t *testing.T) {
 
 	if c.Access("test4").(int) != 45 {
 		t.Error("Didn't get the right value back from the cache (test4)")
+	}
+}
+
+type testStruct struct {
+	id      int
+	expired map[int]bool
+}
+
+func (s testStruct) Expire() {
+	s.expired[s.id] = true
+}
+
+func TestExpirer(t *testing.T) {
+	expired := make(map[int]bool)
+	c := lfucache.Create(3)
+
+	c.Insert("test1", testStruct{42, expired}) // usage=1
+	c.Access("test1")                          // usage=2
+	c.Access("test1")                          // usage=3
+
+	c.Insert("test2", testStruct{43, expired}) // usage=1
+
+	c.Insert("test3", testStruct{44, expired}) // usage=1
+	c.Access("test3")                          // usage=2
+
+	c.Access("test1")
+	c.Access("test2")
+	c.Access("test3")
+
+	if len(expired) != 0 {
+		t.Error("Premature expire")
+	}
+
+	c.Insert("test4", testStruct{45, expired}) // usage=1
+
+	if len(expired) != 1 || !expired[43] {
+		t.Errorf("Incorrect expired %#v", expired)
 	}
 }

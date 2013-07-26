@@ -8,45 +8,55 @@ access and delete operations.
 */
 package lfucache
 
-import "fmt"
-
 // Cache is a LFU cache structure.
 type Cache struct {
-	size          int
-	nItems        int
-	frequenceNode *frequencyNode
+	maxItems      int
+	numItems      int
+	frequencyList *frequencyNode
 	index         map[string]*node
 }
 
+// Expirer is the interface for an object that wants to know when it expires
+// from the cache. If a value in the cache implements the Expirer interface the
+// Expire() method will get called just prior to the object being removed from
+// cache. Note: this will only happen when the value is being removed due to an
+// LFU cache eviction, not on explicit calls to Delete.
+type Expirer interface {
+	Expire()
+}
+
 type frequencyNode struct {
-	usage     int
-	prev      *frequencyNode
-	next      *frequencyNode
-	firstNode *node
+	usage    int
+	prev     *frequencyNode
+	next     *frequencyNode
+	nodeList *node
 }
 
 type node struct {
-	key           string
-	value         interface{}
-	frequencyNode *frequencyNode
-	next          *node
-	prev          *node
+	key    string
+	value  interface{}
+	parent *frequencyNode
+	next   *node
+	prev   *node
 }
 
 // Create a new LFU Cache structure.
-// size is the maximum number of items contained in the cache.
-func Create(size int) *Cache {
+// maxItems is the maximum number of items contained in the cache.
+func Create(maxItems int) *Cache {
 	c := Cache{}
-	c.size = size
+	c.maxItems = maxItems
 	c.index = make(map[string]*node)
-	c.frequenceNode = &frequencyNode{1, nil, nil, nil}
+	c.frequencyList = &frequencyNode{1, nil, nil, nil}
 	return &c
 }
 
 // Insert a new item into the cache.
 func (c *Cache) Insert(key string, value interface{}) {
-	if c.nItems == c.size {
+	if c.numItems == c.maxItems {
 		n := c.lfu()
+		if v, ok := n.value.(Expirer); ok {
+			v.Expire()
+		}
 		c.deleteNode(n)
 	}
 
@@ -59,9 +69,9 @@ func (c *Cache) Insert(key string, value interface{}) {
 	c.index[key] = n
 
 	// Insert into LFU Cache
-	c.moveNodeToFn(n, c.frequenceNode)
+	c.moveNodeToFn(n, c.frequencyList)
 
-	c.nItems++
+	c.numItems++
 }
 
 // Delete an item from the cache.
@@ -75,22 +85,22 @@ func (c *Cache) Delete(key string) {
 // Access an item in the cache.
 // Increases the items use count.
 func (c *Cache) Access(key string) interface{} {
-	node, ok := c.index[key]
+	n, ok := c.index[key]
 	if !ok {
 		return nil
 	}
 
-	nextUsage := node.frequencyNode.usage + 1
+	nextUsage := n.parent.usage + 1
 	var nextFn *frequencyNode
-	if node.frequencyNode.next == nil || node.frequencyNode.next.usage != nextUsage {
-		nextFn = c.newFrequencyNode(nextUsage, node.frequencyNode, node.frequencyNode.next)
+	if n.parent.next == nil || n.parent.next.usage != nextUsage {
+		nextFn = c.newFrequencyNode(nextUsage, n.parent, n.parent.next)
 	} else {
-		nextFn = node.frequencyNode.next
+		nextFn = n.parent.next
 	}
 
-	c.moveNodeToFn(node, nextFn)
+	c.moveNodeToFn(n, nextFn)
 
-	return node.value
+	return n.value
 }
 
 func (c *Cache) deleteNode(n *node) {
@@ -102,22 +112,22 @@ func (c *Cache) deleteNode(n *node) {
 		n.next.prev = n.prev
 	}
 
-	if n.frequencyNode.firstNode == n {
-		n.frequencyNode.firstNode = n.next
+	if n.parent.nodeList == n {
+		n.parent.nodeList = n.next
 	}
 
 	delete(c.index, n.key)
-	c.nItems--
+	c.numItems--
 
-	if n.frequencyNode.firstNode == nil {
-		c.deleteFrequencyNode(n.frequencyNode)
+	if n.parent.nodeList == nil {
+		c.deleteFrequencyNode(n.parent)
 	}
 }
 
 func (c *Cache) lfu() *node {
-	for fn := c.frequenceNode; fn != nil; fn = fn.next {
-		if fn.firstNode != nil {
-			return fn.firstNode
+	for fn := c.frequencyList; fn != nil; fn = fn.next {
+		if fn.nodeList != nil {
+			return fn.nodeList
 		}
 	}
 
@@ -156,35 +166,14 @@ func (c *Cache) moveNodeToFn(n *node, fn *frequencyNode) {
 		n.prev = nil
 	}
 
-	if n.frequencyNode != nil && n.frequencyNode.firstNode == n {
-		n.frequencyNode.firstNode = n.next
+	if n.parent != nil && n.parent.nodeList == n {
+		n.parent.nodeList = n.next
 	}
 
-	n.frequencyNode = fn
-	n.next = fn.firstNode
+	n.parent = fn
+	n.next = fn.nodeList
 	if n.next != nil {
 		n.next.prev = n
 	}
-	fn.firstNode = n
-}
-
-// Debug
-
-func (c *Cache) Print() {
-	fmt.Printf("C %#v\n", c)
-
-	for fn := c.frequenceNode; fn != nil; fn = fn.next {
-		c.printFreqNode(fn)
-	}
-}
-
-func (c *Cache) printFreqNode(fn *frequencyNode) {
-	fmt.Printf(" FN %#v\n", fn)
-	for n := fn.firstNode; n != nil; n = n.next {
-		c.printNode(n)
-	}
-}
-
-func (c *Cache) printNode(n *node) {
-	fmt.Printf("  N %#v\n", n)
+	fn.nodeList = n
 }
