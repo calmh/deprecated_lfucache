@@ -50,8 +50,13 @@ func Create(maxItems int) *Cache {
 	return &c
 }
 
-// Insert a new item into the cache.
+// Insert a new item into the cache. Does nothing if the key already exists in
+// the cache.
 func (c *Cache) Insert(key string, value interface{}) {
+	if _, ok := c.index[key]; ok {
+		return
+	}
+
 	if c.numItems == c.maxItems {
 		n := c.lfu()
 		if v, ok := n.value.(Expirer); ok {
@@ -60,21 +65,16 @@ func (c *Cache) Insert(key string, value interface{}) {
 		c.deleteNode(n)
 	}
 
-	// Create node
 	n := &node{}
 	n.key = key
 	n.value = value
-
-	// Insert into map
 	c.index[key] = n
-
-	// Insert into LFU Cache
 	c.moveNodeToFn(n, c.frequencyList)
-
 	c.numItems++
 }
 
-// Delete an item from the cache.
+// Delete an item from the cache. Does nothing if the item is not present in
+// the cache.
 func (c *Cache) Delete(key string) {
 	n, ok := c.index[key]
 	if ok {
@@ -82,12 +82,12 @@ func (c *Cache) Delete(key string) {
 	}
 }
 
-// Access an item in the cache.
-// Increases the items use count.
-func (c *Cache) Access(key string) interface{} {
+// Access an item in the cache. Returns "value, ok" similar to map indexing.
+// Increases the item's use count.
+func (c *Cache) Access(key string) (interface{}, bool) {
 	n, ok := c.index[key]
 	if !ok {
-		return nil
+		return nil, false
 	}
 
 	nextUsage := n.parent.usage + 1
@@ -100,7 +100,12 @@ func (c *Cache) Access(key string) interface{} {
 
 	c.moveNodeToFn(n, nextFn)
 
-	return n.value
+	return n.value, true
+}
+
+// Returns the number of items in the cache.
+func (c *Cache) Size() int {
+	return c.numItems
 }
 
 func (c *Cache) deleteNode(n *node) {

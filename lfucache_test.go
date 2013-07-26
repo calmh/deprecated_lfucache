@@ -12,7 +12,7 @@ func TestInstantiateCache(t *testing.T) {
 func TestInsertAccess(t *testing.T) {
 	c := lfucache.Create(10)
 	c.Insert("test", 42)
-	v := c.Access("test")
+	v, _ := c.Access("test")
 	if v.(int) != 42 {
 		t.Error("Didn't get the right value back from the cache")
 	}
@@ -30,33 +30,33 @@ func TestExpiry(t *testing.T) {
 	c.Insert("test3", 44) // usage=1
 	c.Access("test3")     // usage=2
 
-	if c.Access("test1").(int) != 42 {
+	if v, _ := c.Access("test1"); v.(int) != 42 {
 		t.Error("Didn't get the right value back from the cache (test1)")
 	}
 
-	if c.Access("test2").(int) != 43 {
+	if v, _ := c.Access("test2"); v.(int) != 43 {
 		t.Error("Didn't get the right value back from the cache (test2)")
 	}
 
-	if c.Access("test3").(int) != 44 {
+	if v, _ := c.Access("test3"); v.(int) != 44 {
 		t.Error("Didn't get the right value back from the cache (test3)")
 	}
 
 	c.Insert("test4", 45) // usage=1, should remove test2 which is lfu
 
-	if c.Access("test1").(int) != 42 {
+	if v, _ := c.Access("test1"); v.(int) != 42 {
 		t.Error("Didn't get the right value back from the cache (test1)")
 	}
 
-	if c.Access("test2") != nil {
+	if _, ok := c.Access("test2"); ok {
 		t.Error("Node test2 was not removed")
 	}
 
-	if c.Access("test3").(int) != 44 {
+	if v, _ := c.Access("test3"); v.(int) != 44 {
 		t.Error("Didn't get the right value back from the cache (test3)")
 	}
 
-	if c.Access("test4").(int) != 45 {
+	if v, _ := c.Access("test4"); v.(int) != 45 {
 		t.Error("Didn't get the right value back from the cache (test4)")
 	}
 }
@@ -75,30 +75,48 @@ func TestDelete(t *testing.T) {
 
 	c.Delete("test1")
 
-	if c.Access("test1") != nil {
+	if _, ok := c.Access("test1"); ok {
 		t.Error("test1 was not deleted")
 	}
 
-	if c.Access("test2").(int) != 43 {
+	if v, _ := c.Access("test2"); v.(int) != 43 {
 		t.Error("Didn't get the right value back from the cache (test2)")
 	}
 
-	if c.Access("test3").(int) != 44 {
+	if v, _ := c.Access("test3"); v.(int) != 44 {
 		t.Error("Didn't get the right value back from the cache (test3)")
 	}
+}
 
-	c.Insert("test4", 45) // usage=1
+func TestSize(t *testing.T) {
+	c := lfucache.Create(3)
 
-	if c.Access("test2").(int) != 43 {
-		t.Error("Didn't get the right value back from the cache (test2)")
+	c.Insert("test1", 42)
+	c.Insert("test2", 43)
+	c.Insert("test3", 44)
+	c.Insert("test4", 45) // test3 is deleted
+	c.Delete("test1")
+
+	if c.Size() != 2 {
+		t.Error("Unexpected size")
+	}
+}
+
+func TestDoubleInsert(t *testing.T) {
+	c := lfucache.Create(3)
+
+	c.Insert("test1", 42)
+	c.Insert("test1", 43)
+	c.Insert("test1", 44)
+
+	if c.Size() != 1 {
+		t.Error("Unexpected size")
 	}
 
-	if c.Access("test3").(int) != 44 {
-		t.Error("Didn't get the right value back from the cache (test3)")
-	}
+	c.Delete("test1")
 
-	if c.Access("test4").(int) != 45 {
-		t.Error("Didn't get the right value back from the cache (test4)")
+	if c.Size() != 0 {
+		t.Error("Unexpected size")
 	}
 }
 
