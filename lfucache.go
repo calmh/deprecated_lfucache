@@ -14,15 +14,7 @@ type Cache struct {
 	numItems      int
 	frequencyList *frequencyNode
 	index         map[string]*node
-}
-
-// Expirer is the interface for an object that wants to know when it expires
-// from the cache. If a value in the cache implements the Expirer interface the
-// Expire() method will get called just prior to the object being removed from
-// cache. Note: this will only happen when the value is being removed due to an
-// LFU cache eviction, not on explicit calls to Delete.
-type Expirer interface {
-	Expire()
+	expires		[]chan interface{}
 }
 
 type frequencyNode struct {
@@ -40,13 +32,14 @@ type node struct {
 	prev   *node
 }
 
-// Create a new LFU Cache structure.
-// maxItems is the maximum number of items contained in the cache.
+// Create a new LFU Cache structure. maxItems is the maximum number of items
+// that can be contained in the cache.
 func Create(maxItems int) *Cache {
 	c := Cache{}
 	c.maxItems = maxItems
 	c.index = make(map[string]*node)
 	c.frequencyList = &frequencyNode{1, nil, nil, nil}
+	c.expires = make([]chan interface{}, 0)
 	return &c
 }
 
@@ -59,8 +52,8 @@ func (c *Cache) Insert(key string, value interface{}) {
 
 	if c.numItems == c.maxItems {
 		n := c.lfu()
-		if v, ok := n.value.(Expirer); ok {
-			v.Expire()
+		for _, c := range c.expires {
+			c <- n.value
 		}
 		c.deleteNode(n)
 	}
@@ -108,6 +101,12 @@ func (c *Cache) Size() int {
 	return c.numItems
 }
 
+func (c *Cache) Expired() <-chan interface{} {
+	exp := make(chan interface{})
+	c.expires = append(c.expires, exp)
+	return exp
+}
+
 func (c *Cache) deleteNode(n *node) {
 	if n.prev != nil {
 		n.prev.next = n.next
@@ -124,7 +123,7 @@ func (c *Cache) deleteNode(n *node) {
 	delete(c.index, n.key)
 	c.numItems--
 
-	if n.parent.nodeList == nil {
+	if n.parent.usage != 1 && n.parent.nodeList == nil {
 		c.deleteFrequencyNode(n.parent)
 	}
 }
@@ -173,6 +172,10 @@ func (c *Cache) moveNodeToFn(n *node, fn *frequencyNode) {
 
 	if n.parent != nil && n.parent.nodeList == n {
 		n.parent.nodeList = n.next
+	}
+
+	if n.parent != nil && n.parent.usage != 1 && n.parent.nodeList == nil {
+		c.deleteFrequencyNode(n.parent)
 	}
 
 	n.parent = fn

@@ -120,39 +120,54 @@ func TestDoubleInsert(t *testing.T) {
 	}
 }
 
-type testStruct struct {
-	id      int
-	expired map[int]bool
-}
-
-func (s testStruct) Expire() {
-	s.expired[s.id] = true
-}
-
-func TestExpirer(t *testing.T) {
-	expired := make(map[int]bool)
+func TestExpiredChannel(t *testing.T) {
 	c := lfucache.Create(3)
+	exp := c.Expired()
 
-	c.Insert("test1", testStruct{42, expired}) // usage=1
-	c.Access("test1")                          // usage=2
-	c.Access("test1")                          // usage=3
+	start := make(chan bool)
+	done := make(chan bool)
+	go func() {
+		ready := false
+		for {
+			select {
+			case e := <-exp:
+				if !ready {
+					t.Errorf("Unexpected expire %#v", e)
+				} else if e.(int) != 43 {
+					t.Errorf("Incorrect expire %#v", e)
+				} else {
+					done <- true
+				}
+			case <-start:
+				ready = true
+			}
+		}
+	}()
 
-	c.Insert("test2", testStruct{43, expired}) // usage=1
 
-	c.Insert("test3", testStruct{44, expired}) // usage=1
-	c.Access("test3")                          // usage=2
+	c.Insert("test1", 42) // usage=1
+	c.Access("test1")     // usage=2
+	c.Access("test1")     // usage=3
+
+	c.Insert("test2", 43) // usage=1
+
+	c.Insert("test3", 44) // usage=1
+	c.Access("test3")     // usage=2
 
 	c.Access("test1")
 	c.Access("test2")
 	c.Access("test3")
 
-	if len(expired) != 0 {
-		t.Error("Premature expire")
-	}
+	start <- true
+	c.Insert("test4", 45) // usage=1
+	<-done
+}
 
-	c.Insert("test4", testStruct{45, expired}) // usage=1
-
-	if len(expired) != 1 || !expired[43] {
-		t.Errorf("Incorrect expired %#v", expired)
-	}
+func TestLFUPanic(t *testing.T) {
+	c := lfucache.Create(0)
+	defer func() {
+		_ = recover()
+	}()
+	c.Insert("test1", 42)
+	t.Error("Should not continue past error condition")
 }
