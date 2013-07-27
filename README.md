@@ -10,8 +10,21 @@ LFU cache eviction scheme" by K. Shah, A. Mitra and D. Matani.
 It is based on two levels of doubly linked lists and gives O(1) insert, access
 and delete operations. The cache supports sending evicted items to interested
 listeners via channels, and manually evicting all cache items matching a
-criteria. This is useful for example when using the cache as a write cache for a
-database, where evicted items must be written to the database.
+criteria. This is useful for example when using the package as a write cache for
+a database, where items must be written to the backing store on eviction.
+
+### Example
+
+    c := lfucache.Create(1024)
+    c.Insert("mykey", 2345) // => true
+    c.Access("foo")         // => nil, false
+    c.Access("mykey")       // => interface{}{2345}, true
+    c.Delete("mykey")       // => true
+
+
+### License
+
+The MIT license.
 
 ## Usage
 
@@ -44,8 +57,8 @@ Increases the item's use count.
 ```go
 func (c *Cache) Delete(key string)
 ```
-Delete an item from the cache. Does nothing if the item is not present in the
-cache.
+Deletes an item from the cache and returns true. Does nothing and returns false
+if the key is not present in the cache.
 
 #### func (*Cache) EvictIf
 
@@ -60,17 +73,19 @@ Returns the number of items that was evicted.
 ```go
 func (c *Cache) Evictions() <-chan interface{}
 ```
-Return a new channel used to report items that get evicted from the cache. Only
+Returns a new channel used to report items that get evicted from the cache. Only
 items evicted due to LFU or EvictIf() will be sent on the channel, not items
-removed by calling Delete().
+removed by calling Delete(). The channel must be unregistered using
+UnregisterEvictions() prior to ceasing reads in order to avoid deadlocking
+evictions.
 
 #### func (*Cache) Insert
 
 ```go
-func (c *Cache) Insert(key string, value interface{})
+func (c *Cache) Insert(key string, value interface{}) bool
 ```
-Insert a new item into the cache. Does nothing if the key already exists in the
-cache.
+Inserts an item into the cache and returns true. Does nothing and returns false
+if the key already exists in the cache.
 
 #### func (*Cache) Print
 
@@ -83,7 +98,7 @@ func (c *Cache) Print()
 ```go
 func (c *Cache) Statistics() Statistics
 ```
-Returns the cache operation statistics.
+Returns the cache statistics.
 
 #### func (*Cache) UnregisterEvictions
 

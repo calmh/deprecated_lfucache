@@ -49,11 +49,11 @@ func Create(maxItems int) *Cache {
 	return &c
 }
 
-// Insert a new item into the cache. Does nothing if the key already exists in
-// the cache.
-func (c *Cache) Insert(key string, value interface{}) {
+// Inserts an item into the cache and returns true. Does nothing and returns
+// false if the key already exists in the cache.
+func (c *Cache) Insert(key string, value interface{}) bool {
 	if _, ok := c.index[key]; ok {
-		return
+		return false
 	}
 
 	if c.numItems == c.maxItems {
@@ -67,10 +67,11 @@ func (c *Cache) Insert(key string, value interface{}) {
 	c.moveNodeToFn(n, c.frequencyList)
 	c.numItems++
 	c.stats.Inserts++
+	return true
 }
 
-// Delete an item from the cache. Does nothing if the item is not present in
-// the cache.
+// Deletes an item from the cache and returns true. Does nothing and returns
+// false if the key is not present in the cache.
 func (c *Cache) Delete(key string) {
 	n, ok := c.index[key]
 	if ok {
@@ -102,7 +103,7 @@ func (c *Cache) Access(key string) (interface{}, bool) {
 	return n.value, true
 }
 
-// Returns the cache operation statistics.
+// Returns the cache statistics.
 func (c *Cache) Statistics() Statistics {
 	c.stats.Items = c.numItems
 	c.stats.ItemsFreq0 = c.items0()
@@ -110,9 +111,11 @@ func (c *Cache) Statistics() Statistics {
 	return c.stats
 }
 
-// Return a new channel used to report items that get evicted from the cache.
+// Returns a new channel used to report items that get evicted from the cache.
 // Only items evicted due to LFU or EvictIf() will be sent on the channel, not
-// items removed by calling Delete().
+// items removed by calling Delete(). The channel must be unregistered using
+// UnregisterEvictions() prior to ceasing reads in order to avoid deadlocking
+// evictions.
 func (c *Cache) Evictions() <-chan interface{} {
 	exp := make(chan interface{})
 	c.evictedChans.PushBack(exp)
