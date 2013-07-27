@@ -92,13 +92,19 @@ func TestSize(t *testing.T) {
 	c := lfucache.Create(3)
 
 	c.Insert("test1", 42)
+	c.Access("test1")
+
 	c.Insert("test2", 43)
 	c.Insert("test3", 44)
-	c.Insert("test4", 45) // test3 is deleted
-	c.Delete("test1")
+	c.Insert("test4", 45) // test3 is evicted
+	c.Delete("test4")
 
-	if c.Size() != 2 {
-		t.Error("Unexpected size")
+	if s := c.Size(); s != 2 {
+		t.Error("Unexpected size", s)
+	}
+
+	if s := c.Size0(); s != 1 {
+		t.Error("Unexpected size0", s)
 	}
 }
 
@@ -176,3 +182,86 @@ func TestLFUPanic(t *testing.T) {
 	c.Insert("test1", 42)
 	t.Error("Should not continue past error condition")
 }
+
+func TestStats(t *testing.T) {
+	c := lfucache.Create(3)
+
+	c.Access("test1")
+	c.Access("test2")
+
+	c.Insert("test1", 42) // usage=1
+	c.Access("test1")
+	c.Access("test1")
+
+	c.Insert("test2", 43) // usage=1
+
+	c.Insert("test3", 44) // usage=1
+	c.Access("test3")
+
+	c.Access("test1")
+	c.Access("test2")
+	c.Access("test3")
+
+	// Will evict test2
+	c.Insert("test4", 45) // usage=1
+
+	c.Access("test2")
+
+	// Will evict test3
+	c.Insert("test5", 45) // usage=1
+
+	c.Delete("test1")
+	c.Delete("test2")
+
+	stats := c.Statistics()
+	if stats.Inserts != 5 {
+		t.Error("Stats inserts incorrect")
+	}
+	if stats.Hits != 6 {
+		t.Error("Stats hits incorrect")
+	}
+	if stats.Misses != 3 {
+		t.Error("Stats misses incorrect")
+	}
+	if stats.Evictions != 2 {
+		t.Error("Stats evictions incorrect")
+	}
+	if stats.Deletes != 1 {
+		t.Error("Stats deletes incorrect")
+	}
+}
+
+func TestEvictIf(t *testing.T) {
+	c := lfucache.Create(10)
+
+	c.Insert("test1", 42)
+	c.Insert("test2", 43)
+	c.Insert("test3", 44)
+	c.Insert("test4", 45)
+	c.Insert("test5", 46)
+
+	ev := c.EvictIf(func (v interface{}) bool {
+		return v.(int) % 2 == 0
+	})
+
+	if ev != 3 {
+		t.Error("Incorrect number of items evicted", ev)
+	}
+
+	if _, ok := c.Access("test1"); ok {
+		t.Error("test1 not expected to exist")
+	}
+	if _, ok := c.Access("test2"); !ok {
+		t.Error("test2 expected to exist")
+	}
+	if _, ok := c.Access("test3"); ok {
+		t.Error("test3 not expected to exist")
+	}
+	if _, ok := c.Access("test4"); !ok {
+		t.Error("test4 expected to exist")
+	}
+	if _, ok := c.Access("test5"); ok {
+		t.Error("test5 not expected to exist")
+	}
+}
+

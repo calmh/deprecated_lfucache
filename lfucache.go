@@ -17,6 +17,17 @@ type Cache struct {
 	frequencyList *frequencyNode
 	index         map[string]*node
 	evictedChans  *list.List
+	stats         Statistics
+}
+
+// Statistics as monotonically increasing counters, apart from FreqListLen which is a snapshot value.
+type Statistics struct {
+	Inserts     int
+	Hits        int
+	Misses      int
+	Evictions   int
+	Deletes     int
+	FreqListLen int
 }
 
 type frequencyNode struct {
@@ -40,7 +51,7 @@ func Create(maxItems int) *Cache {
 	c := Cache{}
 	c.maxItems = maxItems
 	c.index = make(map[string]*node)
-	c.frequencyList = &frequencyNode{1, nil, nil, nil}
+	c.frequencyList = &frequencyNode{0, nil, nil, nil}
 	c.evictedChans = list.New()
 	return &c
 }
@@ -53,11 +64,7 @@ func (c *Cache) Insert(key string, value interface{}) {
 	}
 
 	if c.numItems == c.maxItems {
-		n := c.lfu()
-		for c := c.evictedChans.Front(); c != nil; c = c.Next() {
-			c.Value.(chan interface{}) <- n.value
-		}
-		c.deleteNode(n)
+		c.evict(c.lfu())
 	}
 
 	n := &node{}
@@ -66,6 +73,7 @@ func (c *Cache) Insert(key string, value interface{}) {
 	c.index[key] = n
 	c.moveNodeToFn(n, c.frequencyList)
 	c.numItems++
+	c.stats.Inserts++
 }
 
 // Delete an item from the cache. Does nothing if the item is not present in
@@ -74,6 +82,7 @@ func (c *Cache) Delete(key string) {
 	n, ok := c.index[key]
 	if ok {
 		c.deleteNode(n)
+		c.stats.Deletes++
 	}
 }
 
@@ -82,6 +91,7 @@ func (c *Cache) Delete(key string) {
 func (c *Cache) Access(key string) (interface{}, bool) {
 	n, ok := c.index[key]
 	if !ok {
+		c.stats.Misses++
 		return nil, false
 	}
 
@@ -95,12 +105,28 @@ func (c *Cache) Access(key string) (interface{}, bool) {
 
 	c.moveNodeToFn(n, nextFn)
 
+	c.stats.Hits++
 	return n.value, true
 }
 
 // Returns the number of items in the cache.
 func (c *Cache) Size() int {
 	return c.numItems
+}
+
+// Returns the number of items at the first level (never Accessed) of the cache.
+func (c *Cache) Size0() int {
+	cnt := 0
+	for n := c.frequencyList.nodeList; n != nil; n = n.next {
+		cnt++
+	}
+	return cnt
+}
+
+// Returns the cache operation statistics.
+func (c *Cache) Statistics() Statistics {
+	c.stats.FreqListLen = c.numFrequencyNodes()
+	return c.stats
 }
 
 // Return a new channel used to report items that get evicted from the cache.
@@ -112,7 +138,7 @@ func (c *Cache) Evicted() <-chan interface{} {
 	return exp
 }
 
-// Remove the channel from the list of channels to be notified on item eviction.
+// Removes the channel from the list of channels to be notified on item eviction.
 // Must be called when there is no longer a reader for the channel in question.
 func (c *Cache) UnregisterEvicted(exp <-chan interface{}) {
 	for el := c.evictedChans.Front(); el != nil; el = el.Next() {
@@ -121,6 +147,27 @@ func (c *Cache) UnregisterEvicted(exp <-chan interface{}) {
 			return
 		}
 	}
+}
+
+// Applies test to each item in the cache and evicts it if the test returns true.
+// Returns the number of items that was evicted.
+func (c *Cache) EvictIf(test func(interface{}) bool) int {
+	cnt := 0
+	for _, n := range c.index {
+		if test(n.value) {
+			c.evict(n)
+			cnt++
+		}
+	}
+	return cnt
+}
+
+func (c *Cache) evict(n *node) {
+	for c := c.evictedChans.Front(); c != nil; c = c.Next() {
+		c.Value.(chan interface{}) <- n.value
+	}
+	c.deleteNode(n)
+	c.stats.Evictions++
 }
 
 func (c *Cache) deleteNode(n *node) {
@@ -139,7 +186,7 @@ func (c *Cache) deleteNode(n *node) {
 	delete(c.index, n.key)
 	c.numItems--
 
-	if n.parent.usage != 1 && n.parent.nodeList == nil {
+	if n.parent.usage != 0 && n.parent.nodeList == nil {
 		c.deleteFrequencyNode(n.parent)
 	}
 }
@@ -190,7 +237,7 @@ func (c *Cache) moveNodeToFn(n *node, fn *frequencyNode) {
 		n.parent.nodeList = n.next
 	}
 
-	if n.parent != nil && n.parent.usage != 1 && n.parent.nodeList == nil {
+	if n.parent != nil && n.parent.usage != 0 && n.parent.nodeList == nil {
 		c.deleteFrequencyNode(n.parent)
 	}
 
@@ -200,4 +247,12 @@ func (c *Cache) moveNodeToFn(n *node, fn *frequencyNode) {
 		n.next.prev = n
 	}
 	fn.nodeList = n
+}
+
+func (c *Cache) numFrequencyNodes() int {
+	count := 0
+	for fn := c.frequencyList; fn != nil; fn = fn.next {
+		count++
+	}
+	return count
 }
