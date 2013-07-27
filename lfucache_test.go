@@ -88,26 +88,6 @@ func TestDelete(t *testing.T) {
 	}
 }
 
-func TestSize(t *testing.T) {
-	c := lfucache.Create(3)
-
-	c.Insert("test1", 42)
-	c.Access("test1")
-
-	c.Insert("test2", 43)
-	c.Insert("test3", 44)
-	c.Insert("test4", 45) // test3 is evicted
-	c.Delete("test4")
-
-	if s := c.Size(); s != 2 {
-		t.Error("Unexpected size", s)
-	}
-
-	if s := c.Size0(); s != 1 {
-		t.Error("Unexpected size0", s)
-	}
-}
-
 func TestDoubleInsert(t *testing.T) {
 	c := lfucache.Create(3)
 
@@ -115,20 +95,20 @@ func TestDoubleInsert(t *testing.T) {
 	c.Insert("test1", 43)
 	c.Insert("test1", 44)
 
-	if c.Size() != 1 {
+	if c.Statistics().Items != 1 {
 		t.Error("Unexpected size")
 	}
 
 	c.Delete("test1")
 
-	if c.Size() != 0 {
+	if c.Statistics().Items != 0 {
 		t.Error("Unexpected size")
 	}
 }
 
-func TestEvictedChannel(t *testing.T) {
+func TestEvictionsChannel(t *testing.T) {
 	c := lfucache.Create(3)
-	exp := c.Evicted()
+	exp := c.Evictions()
 
 	start := make(chan bool)
 	done := make(chan bool)
@@ -169,7 +149,7 @@ func TestEvictedChannel(t *testing.T) {
 	c.Insert("test4", 45) // usage=1
 	<-done
 
-	c.UnregisterEvicted(exp)
+	c.UnregisterEvictions(exp)
 	// Will evict test3, there is noone listening on the expired channel
 	c.Insert("test5", 45) // usage=1
 }
@@ -214,6 +194,13 @@ func TestStats(t *testing.T) {
 	c.Delete("test2")
 
 	stats := c.Statistics()
+
+	if stats.Items != 2 {
+		t.Error("Stats items incorrect", stats.Items)
+	}
+	if stats.ItemsFreq0 != 1 {
+		t.Error("Stats itemsfreq0 incorrect")
+	}
 	if stats.Inserts != 5 {
 		t.Error("Stats inserts incorrect")
 	}
@@ -229,6 +216,9 @@ func TestStats(t *testing.T) {
 	if stats.Deletes != 1 {
 		t.Error("Stats deletes incorrect")
 	}
+	if stats.FreqListLen != 2 {
+		t.Error("Stats freqlistlen incorrect")
+	}
 }
 
 func TestEvictIf(t *testing.T) {
@@ -240,8 +230,8 @@ func TestEvictIf(t *testing.T) {
 	c.Insert("test4", 45)
 	c.Insert("test5", 46)
 
-	ev := c.EvictIf(func (v interface{}) bool {
-		return v.(int) % 2 == 0
+	ev := c.EvictIf(func(v interface{}) bool {
+		return v.(int)%2 == 0
 	})
 
 	if ev != 3 {
@@ -264,4 +254,3 @@ func TestEvictIf(t *testing.T) {
 		t.Error("test5 not expected to exist")
 	}
 }
-

@@ -12,14 +12,16 @@ type Cache struct {
 	stats         Statistics
 }
 
-// Statistics as monotonically increasing counters, apart from FreqListLen which is a snapshot value.
+// Current item counts and operation counters.
 type Statistics struct {
-	Inserts     int
-	Hits        int
-	Misses      int
-	Evictions   int
-	Deletes     int
-	FreqListLen int
+	Items       int // Number of items currently in the cache
+	ItemsFreq0  int // Number of items at frequency zero, i.e Inserted but not Accessed
+	Inserts     int // Number of Insert()s
+	Hits        int // Number of hits (Access() to item)
+	Misses      int // Number of misses (Access() to non-existant key)
+	Evictions   int // Number of evictions (due to size constraints on Insert(), or EvictIf() calls)
+	Deletes     int // Number of Delete()s.
+	FreqListLen int // Current length of frequency list, i.e. the number of distinct usage levels
 }
 
 type frequencyNode struct {
@@ -37,8 +39,7 @@ type node struct {
 	prev   *node
 }
 
-// Create a new LFU Cache structure. maxItems is the maximum number of items
-// that can be contained in the cache.
+// Create a new LFU Cache structure.
 func Create(maxItems int) *Cache {
 	c := Cache{}
 	c.maxItems = maxItems
@@ -101,30 +102,18 @@ func (c *Cache) Access(key string) (interface{}, bool) {
 	return n.value, true
 }
 
-// Returns the number of items in the cache.
-func (c *Cache) Size() int {
-	return c.numItems
-}
-
-// Returns the number of items at the first level (never Accessed) of the cache.
-func (c *Cache) Size0() int {
-	cnt := 0
-	for n := c.frequencyList.nodeList; n != nil; n = n.next {
-		cnt++
-	}
-	return cnt
-}
-
 // Returns the cache operation statistics.
 func (c *Cache) Statistics() Statistics {
+	c.stats.Items = c.numItems
+	c.stats.ItemsFreq0 = c.items0()
 	c.stats.FreqListLen = c.numFrequencyNodes()
 	return c.stats
 }
 
 // Return a new channel used to report items that get evicted from the cache.
-// Only items evicted due to LFU will be sent on the channel, not items removed
-// by calling Delete().
-func (c *Cache) Evicted() <-chan interface{} {
+// Only items evicted due to LFU or EvictIf() will be sent on the channel, not
+// items removed by calling Delete().
+func (c *Cache) Evictions() <-chan interface{} {
 	exp := make(chan interface{})
 	c.evictedChans.PushBack(exp)
 	return exp
@@ -132,7 +121,7 @@ func (c *Cache) Evicted() <-chan interface{} {
 
 // Removes the channel from the list of channels to be notified on item eviction.
 // Must be called when there is no longer a reader for the channel in question.
-func (c *Cache) UnregisterEvicted(exp <-chan interface{}) {
+func (c *Cache) UnregisterEvictions(exp <-chan interface{}) {
 	for el := c.evictedChans.Front(); el != nil; el = el.Next() {
 		if el.Value.(chan interface{}) == exp {
 			c.evictedChans.Remove(el)
@@ -150,6 +139,14 @@ func (c *Cache) EvictIf(test func(interface{}) bool) int {
 			c.evict(n)
 			cnt++
 		}
+	}
+	return cnt
+}
+
+func (c *Cache) items0() int {
+	cnt := 0
+	for n := c.frequencyList.nodeList; n != nil; n = n.next {
+		cnt++
 	}
 	return cnt
 }

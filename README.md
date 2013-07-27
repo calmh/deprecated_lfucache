@@ -29,8 +29,7 @@ Cache is a LFU cache structure.
 ```go
 func Create(maxItems int) *Cache
 ```
-Create a new LFU Cache structure. maxItems is the maximum number of items that
-can be contained in the cache.
+Create a new LFU Cache structure.
 
 #### func (*Cache) Access
 
@@ -56,14 +55,14 @@ func (c *Cache) EvictIf(test func(interface{}) bool) int
 Applies test to each item in the cache and evicts it if the test returns true.
 Returns the number of items that was evicted.
 
-#### func (*Cache) Evicted
+#### func (*Cache) Evictions
 
 ```go
-func (c *Cache) Evicted() <-chan interface{}
+func (c *Cache) Evictions() <-chan interface{}
 ```
 Return a new channel used to report items that get evicted from the cache. Only
-items evicted due to LFU will be sent on the channel, not items removed by
-calling Delete().
+items evicted due to LFU or EvictIf() will be sent on the channel, not items
+removed by calling Delete().
 
 #### func (*Cache) Insert
 
@@ -79,20 +78,6 @@ cache.
 func (c *Cache) Print()
 ```
 
-#### func (*Cache) Size
-
-```go
-func (c *Cache) Size() int
-```
-Returns the number of items in the cache.
-
-#### func (*Cache) Size0
-
-```go
-func (c *Cache) Size0() int
-```
-Returns the number of items at the first level (never Accessed) of the cache.
-
 #### func (*Cache) Statistics
 
 ```go
@@ -100,10 +85,10 @@ func (c *Cache) Statistics() Statistics
 ```
 Returns the cache operation statistics.
 
-#### func (*Cache) UnregisterEvicted
+#### func (*Cache) UnregisterEvictions
 
 ```go
-func (c *Cache) UnregisterEvicted(exp <-chan interface{})
+func (c *Cache) UnregisterEvictions(exp <-chan interface{})
 ```
 Removes the channel from the list of channels to be notified on item eviction.
 Must be called when there is no longer a reader for the channel in question.
@@ -112,14 +97,15 @@ Must be called when there is no longer a reader for the channel in question.
 
 ```go
 type Statistics struct {
-	Inserts     int
-	Hits        int
-	Misses      int
-	Evictions   int
-	Deletes     int
-	FreqListLen int
+	Items       int // Number of items currently in the cache
+	ItemsFreq0  int // Number of items at frequency zero, i.e Inserted but not Accessed
+	Inserts     int // Number of Insert()s
+	Hits        int // Number of hits (Access() to item)
+	Misses      int // Number of misses (Access() to non-existant key)
+	Evictions   int // Number of evictions (due to size constraints on Insert(), or EvictIf() calls)
+	Deletes     int // Number of Delete()s.
+	FreqListLen int // Current length of frequency list, i.e. the number of distinct usage levels
 }
 ```
 
-Statistics as monotonically increasing counters, apart from FreqListLen which is
-a snapshot value.
+Current item counts and operation counters.
