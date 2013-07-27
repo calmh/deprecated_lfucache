@@ -8,13 +8,15 @@ access and delete operations.
 */
 package lfucache
 
+import "container/list"
+
 // Cache is a LFU cache structure.
 type Cache struct {
 	maxItems      int
 	numItems      int
 	frequencyList *frequencyNode
 	index         map[string]*node
-	expires		[]chan interface{}
+	evictedChans  *list.List
 }
 
 type frequencyNode struct {
@@ -39,7 +41,7 @@ func Create(maxItems int) *Cache {
 	c.maxItems = maxItems
 	c.index = make(map[string]*node)
 	c.frequencyList = &frequencyNode{1, nil, nil, nil}
-	c.expires = make([]chan interface{}, 0)
+	c.evictedChans = list.New()
 	return &c
 }
 
@@ -52,8 +54,8 @@ func (c *Cache) Insert(key string, value interface{}) {
 
 	if c.numItems == c.maxItems {
 		n := c.lfu()
-		for _, c := range c.expires {
-			c <- n.value
+		for c := c.evictedChans.Front(); c != nil; c = c.Next() {
+			c.Value.(chan interface{}) <- n.value
 		}
 		c.deleteNode(n)
 	}
@@ -101,10 +103,24 @@ func (c *Cache) Size() int {
 	return c.numItems
 }
 
-func (c *Cache) Expired() <-chan interface{} {
+// Return a new channel used to report items that get evicted from the cache.
+// Only items evicted due to LFU will be sent on the channel, not items removed
+// by calling Delete().
+func (c *Cache) Evicted() <-chan interface{} {
 	exp := make(chan interface{})
-	c.expires = append(c.expires, exp)
+	c.evictedChans.PushBack(exp)
 	return exp
+}
+
+// Remove the channel from the list of channels to be notified on item eviction.
+// Must be called when there is no longer a reader for the channel in question.
+func (c *Cache) UnregisterEvicted(exp <-chan interface{}) {
+	for el := c.evictedChans.Front(); el != nil; el = el.Next() {
+		if el.Value.(chan interface{}) == exp {
+			c.evictedChans.Remove(el)
+			return
+		}
+	}
 }
 
 func (c *Cache) deleteNode(n *node) {

@@ -120,9 +120,9 @@ func TestDoubleInsert(t *testing.T) {
 	}
 }
 
-func TestExpiredChannel(t *testing.T) {
+func TestEvictedChannel(t *testing.T) {
 	c := lfucache.Create(3)
-	exp := c.Expired()
+	exp := c.Evicted()
 
 	start := make(chan bool)
 	done := make(chan bool)
@@ -137,13 +137,13 @@ func TestExpiredChannel(t *testing.T) {
 					t.Errorf("Incorrect expire %#v", e)
 				} else {
 					done <- true
+					return
 				}
 			case <-start:
 				ready = true
 			}
 		}
 	}()
-
 
 	c.Insert("test1", 42) // usage=1
 	c.Access("test1")     // usage=2
@@ -159,8 +159,13 @@ func TestExpiredChannel(t *testing.T) {
 	c.Access("test3")
 
 	start <- true
+	// Will evict test2
 	c.Insert("test4", 45) // usage=1
 	<-done
+
+	c.UnregisterEvicted(exp)
+	// Will evict test3, there is noone listening on the expired channel
+	c.Insert("test5", 45) // usage=1
 }
 
 func TestLFUPanic(t *testing.T) {
