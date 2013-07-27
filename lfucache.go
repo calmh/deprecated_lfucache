@@ -1,11 +1,3 @@
-/*
-Package lfucache implements an O(1) LFU cache structure.
-
-This structure is described in the paper "An O(1) algorithm for implementing
-the LFU cache eviction scheme" by  K. Shah, A. Mitra and D.  Matani, August 16,
-2010. It is based on two levels of doubly linked lists and gives O(1) insert,
-access and delete operations.
-*/
 package lfucache
 
 import "container/list"
