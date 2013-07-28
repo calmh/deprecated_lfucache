@@ -32,17 +32,18 @@ The MIT license.
 
 ```go
 type Cache struct {
+	sync.Mutex
 }
 ```
 
 Cache is a LFU cache structure.
 
-#### func  Create
+#### func  New
 
 ```go
-func Create(maxItems int) *Cache
+func New(maxItems int) *Cache
 ```
-Create a new LFU Cache structure.
+New initializes a new LFU Cache structure.
 
 #### func (*Cache) Access
 
@@ -55,58 +56,73 @@ Increases the item's use count.
 #### func (*Cache) Delete
 
 ```go
-func (c *Cache) Delete(key string)
+func (c *Cache) Delete(key string) bool
 ```
-Deletes an item from the cache and returns true. Does nothing and returns false
-if the key is not present in the cache.
+Delete deletes an item from the cache and returns true. Does nothing and returns
+false if the key was not present in the cache.
+
+#### func (*Cache) DisableLocking
+
+```go
+func (c *Cache) DisableLocking()
+```
+DisableLocking disables the mutex that protects the cache structure from
+corruption by simultaneous modification. If you are certain that thread
+operations are only ever performed from a single goroutine this will somewhat
+improve the performance of all operations. The difference is negligible on
+basically everything except Access which is cheap enough to make the locking
+visible in a benchmark.
+
+#### func (*Cache) EnableChecking
+
+```go
+func (c *Cache) EnableChecking()
+```
+Enable full integrity check of the cache structure after each operation. Slow,
+only useful for debugging suspected problems with the cache algorithm.
 
 #### func (*Cache) EvictIf
 
 ```go
 func (c *Cache) EvictIf(test func(interface{}) bool) int
 ```
-Applies test to each item in the cache and evicts it if the test returns true.
-Returns the number of items that was evicted.
+EvictIf applies test to each item in the cache and evicts it if the test returns
+true. Returns the number of items that was evicted.
 
 #### func (*Cache) Evictions
 
 ```go
 func (c *Cache) Evictions() <-chan interface{}
 ```
-Returns a new channel used to report items that get evicted from the cache. Only
-items evicted due to LFU or EvictIf() will be sent on the channel, not items
-removed by calling Delete(). The channel must be unregistered using
+Evictions returns a new channel used to report items that get evicted from the
+cache. Only items evicted due to LFU or EvictIf() will be sent on the channel,
+not items removed by calling Delete(). The channel must be unregistered using
 UnregisterEvictions() prior to ceasing reads in order to avoid deadlocking
 evictions.
 
 #### func (*Cache) Insert
 
 ```go
-func (c *Cache) Insert(key string, value interface{}) bool
+func (c *Cache) Insert(key string, value interface{})
 ```
-Inserts an item into the cache and returns true. Does nothing and returns false
-if the key already exists in the cache.
-
-#### func (*Cache) Print
-
-```go
-func (c *Cache) Print()
-```
+Insert inserts an item into the cache. If the key already exists, the existing
+item is evicted and the new one inserted.
 
 #### func (*Cache) Statistics
 
 ```go
 func (c *Cache) Statistics() Statistics
 ```
-Returns the cache statistics.
+Statistics returns the cache statistics.
 
 #### func (*Cache) UnregisterEvictions
 
 ```go
 func (c *Cache) UnregisterEvictions(exp <-chan interface{})
 ```
-Removes the channel from the list of channels to be notified on item eviction.
-Must be called when there is no longer a reader for the channel in question.
+UnregisterEvictions removes the channel from the list of channels to be notified
+on item eviction. Must be called when there is no longer a reader for the
+channel in question.
 
 #### type Statistics
 

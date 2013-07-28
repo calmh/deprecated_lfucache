@@ -7,6 +7,8 @@ import (
 
 func TestMinimalFrequencyNodesDuringAccess(t *testing.T) {
 	c := New(10)
+	c.EnableChecking()
+
 	c.Insert("test1", 42) // usage=1
 	c.Insert("test2", 43) // usage=1
 	c.Insert("test3", 44) // usage=1
@@ -42,6 +44,8 @@ func TestMinimalFrequencyNodesDuringAccess(t *testing.T) {
 
 func TestMinimalFrequencyNodesDuringDelete1(t *testing.T) {
 	c := New(10)
+	c.EnableChecking()
+
 	c.Insert("test1", 42) // usage=1
 	c.Insert("test2", 43) // usage=1
 	c.Insert("test3", 44) // usage=1
@@ -77,6 +81,8 @@ func TestMinimalFrequencyNodesDuringDelete1(t *testing.T) {
 
 func TestMinimalFrequencyNodesDuringDelete2(t *testing.T) {
 	c := New(10)
+	c.EnableChecking()
+
 	c.Insert("test1", 42) // usage=1
 	c.Insert("test2", 43) // usage=1
 	c.Insert("test3", 44) // usage=1

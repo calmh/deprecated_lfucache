@@ -9,6 +9,7 @@ import (
 type Cache struct {
 	sync.Mutex
 	threadUnsafe  bool
+	checked       bool
 	maxItems      int
 	numItems      int
 	frequencyList *frequencyNode
@@ -49,6 +50,7 @@ func New(maxItems int) *Cache {
 	if maxItems == 0 {
 		panic("cannot create zero-sized cache")
 	}
+
 	c := Cache{}
 	c.maxItems = maxItems
 	c.index = make(map[string]*node)
@@ -63,6 +65,10 @@ func (c *Cache) Insert(key string, value interface{}) {
 	if !c.threadUnsafe {
 		c.Lock()
 		defer c.Unlock()
+	}
+	if c.checked {
+		c.check()
+		defer c.check()
 	}
 
 	if n, ok := c.index[key]; ok {
@@ -89,6 +95,10 @@ func (c *Cache) Delete(key string) bool {
 		c.Lock()
 		defer c.Unlock()
 	}
+	if c.checked {
+		c.check()
+		defer c.check()
+	}
 
 	n, ok := c.index[key]
 	if ok {
@@ -104,6 +114,10 @@ func (c *Cache) Access(key string) (interface{}, bool) {
 	if !c.threadUnsafe {
 		c.Lock()
 		defer c.Unlock()
+	}
+	if c.checked {
+		c.check()
+		defer c.check()
 	}
 
 	n, ok := c.index[key]
@@ -121,7 +135,6 @@ func (c *Cache) Access(key string) (interface{}, bool) {
 	}
 
 	c.moveNodeToFn(n, nextFn)
-
 	c.stats.Hits++
 	return n.value, true
 }
@@ -132,14 +145,14 @@ func (c *Cache) Statistics() Statistics {
 		c.Lock()
 		defer c.Unlock()
 	}
+	if c.checked {
+		c.check()
+		defer c.check()
+	}
 
 	c.stats.Items = c.numItems
 	c.stats.ItemsFreq0 = c.items0()
 	c.stats.FreqListLen = c.numFrequencyNodes()
-	if c.stats.Items > 1 && c.stats.FreqListLen > c.stats.Items+1 {
-		c.print()
-		panic("bug: len(frequency list) > numItems")
-	}
 	return c.stats
 }
 
@@ -152,6 +165,10 @@ func (c *Cache) Evictions() <-chan interface{} {
 	if !c.threadUnsafe {
 		c.Lock()
 		defer c.Unlock()
+	}
+	if c.checked {
+		c.check()
+		defer c.check()
 	}
 
 	exp := make(chan interface{})
@@ -166,6 +183,10 @@ func (c *Cache) UnregisterEvictions(exp <-chan interface{}) {
 	if !c.threadUnsafe {
 		c.Lock()
 		defer c.Unlock()
+	}
+	if c.checked {
+		c.check()
+		defer c.check()
 	}
 
 	for el := c.evictedChans.Front(); el != nil; el = el.Next() {
@@ -182,6 +203,10 @@ func (c *Cache) EvictIf(test func(interface{}) bool) int {
 	if !c.threadUnsafe {
 		c.Lock()
 		defer c.Unlock()
+	}
+	if c.checked {
+		c.check()
+		defer c.check()
 	}
 
 	cnt := 0
@@ -202,6 +227,12 @@ func (c *Cache) EvictIf(test func(interface{}) bool) int {
 // make the locking visible in a benchmark.
 func (c *Cache) DisableLocking() {
 	c.threadUnsafe = true
+}
+
+// Enable full integrity check of the cache structure after each operation.
+// Slow, only useful for debugging suspected problems with the cache algorithm.
+func (c *Cache) EnableChecking() {
+	c.checked = true
 }
 
 func (c *Cache) items0() int {
@@ -241,7 +272,6 @@ func (c *Cache) deleteNode(n *node) {
 
 	delete(c.index, n.key)
 	c.numItems--
-
 }
 
 func (c *Cache) lfu() *node {
@@ -278,12 +308,10 @@ func (c *Cache) deleteFrequencyNode(fn *frequencyNode) {
 func (c *Cache) moveNodeToFn(n *node, fn *frequencyNode) {
 	if n.prev != nil {
 		n.prev.next = n.next
-		n.prev = nil
 	}
 
 	if n.next != nil {
 		n.next.prev = n.prev
-		n.prev = nil
 	}
 
 	if n.parent != nil && n.parent.nodeList == n {
@@ -294,9 +322,12 @@ func (c *Cache) moveNodeToFn(n *node, fn *frequencyNode) {
 		c.deleteFrequencyNode(n.parent)
 	}
 
+	n.prev = nil
+	n.next = nil
+
 	n.parent = fn
-	n.next = fn.nodeList
-	if n.next != nil {
+	if fn.nodeList != nil {
+		n.next = fn.nodeList
 		n.next.prev = n
 	}
 	fn.nodeList = n
@@ -308,4 +339,45 @@ func (c *Cache) numFrequencyNodes() int {
 		count++
 	}
 	return count
+}
+
+func (c *Cache) check() {
+	if c.numItems != len(c.index) {
+		c.print()
+		panic("bug: index/numItems mismatch")
+	}
+
+	count := 0
+	var prevFn *frequencyNode
+	for fn := c.frequencyList; fn != nil; fn = fn.next {
+		if fn.nodeList == nil && fn.usage != 0 {
+			c.print()
+			panic("bug: empty non-head frequency node")
+		}
+		if fn.prev != prevFn {
+			c.print()
+			panic("incorrect prev frequencyNode pointer")
+		}
+
+		var prev *node
+		for n := fn.nodeList; n != nil; n = n.next {
+			if n.parent != fn {
+				c.print()
+				panic("incorrect parent pointer")
+			}
+			if n.prev != prev {
+				c.print()
+				panic("incorrect prev node pointer")
+			}
+			prev = n
+			count++
+		}
+
+		prevFn = fn
+	}
+
+	if count != len(c.index) {
+		c.print()
+		panic("bug: index/item count mismatch")
+	}
 }
