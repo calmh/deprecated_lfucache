@@ -3,14 +3,16 @@ package lfucache_test
 import (
 	"github.com/calmh/lfucache"
 	"testing"
+	"testing/quick"
+	"fmt"
 )
 
 func TestInstantiateCache(t *testing.T) {
-	_ = lfucache.Create(42)
+	_ = lfucache.New(42)
 }
 
 func TestInsertAccess(t *testing.T) {
-	c := lfucache.Create(10)
+	c := lfucache.New(10)
 	c.Insert("test", 42)
 	v, _ := c.Access("test")
 	if v.(int) != 42 {
@@ -19,7 +21,7 @@ func TestInsertAccess(t *testing.T) {
 }
 
 func TestExpiry(t *testing.T) {
-	c := lfucache.Create(3)
+	c := lfucache.New(3)
 
 	c.Insert("test1", 42) // usage=1
 	c.Access("test1")     // usage=2
@@ -62,7 +64,7 @@ func TestExpiry(t *testing.T) {
 }
 
 func TestDelete(t *testing.T) {
-	c := lfucache.Create(3)
+	c := lfucache.New(3)
 
 	c.Insert("test1", 42) // usage=1
 	c.Access("test1")     // usage=2
@@ -89,7 +91,7 @@ func TestDelete(t *testing.T) {
 }
 
 func TestDoubleInsert(t *testing.T) {
-	c := lfucache.Create(3)
+	c := lfucache.New(3)
 
 	c.Insert("test1", 42)
 	c.Insert("test1", 43)
@@ -97,6 +99,10 @@ func TestDoubleInsert(t *testing.T) {
 
 	if c.Statistics().Items != 1 {
 		t.Error("Unexpected size")
+	}
+
+	if v, ok := c.Access("test1"); !ok || v.(int) != 44 {
+		t.Error("Incorrect entry")
 	}
 
 	c.Delete("test1")
@@ -107,7 +113,7 @@ func TestDoubleInsert(t *testing.T) {
 }
 
 func TestEvictionsChannel(t *testing.T) {
-	c := lfucache.Create(3)
+	c := lfucache.New(3)
 	exp := c.Evictions()
 
 	start := make(chan bool)
@@ -154,17 +160,8 @@ func TestEvictionsChannel(t *testing.T) {
 	c.Insert("test5", 45) // usage=1
 }
 
-func TestLFUPanic(t *testing.T) {
-	c := lfucache.Create(0)
-	defer func() {
-		_ = recover()
-	}()
-	c.Insert("test1", 42)
-	t.Error("Should not continue past error condition")
-}
-
 func TestStats(t *testing.T) {
-	c := lfucache.Create(3)
+	c := lfucache.New(3)
 
 	c.Access("test1")
 	c.Access("test2")
@@ -222,7 +219,7 @@ func TestStats(t *testing.T) {
 }
 
 func TestEvictIf(t *testing.T) {
-	c := lfucache.Create(10)
+	c := lfucache.New(10)
 
 	c.Insert("test1", 42)
 	c.Insert("test2", 43)
@@ -254,3 +251,44 @@ func TestEvictIf(t *testing.T) {
 		t.Error("test5 not expected to exist")
 	}
 }
+
+func TestRandomAccess(t *testing.T) {
+	c := lfucache.New(1024)
+	quick.Check(func(key string, val int) bool {
+		c.Insert(key, val)
+		c.Statistics()
+		v, ok := c.Access(key)
+		return ok && v.(int) == val
+	}, &quick.Config{MaxCount: 100000})
+}
+
+func BenchmarkInsert(b *testing.B) {
+	c := lfucache.New(b.N)
+	keys := make([]string, b.N)
+	for i := 0; i < b.N; i++ {
+		keys[i] = fmt.Sprintf("k%d", i)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		c.Insert(keys[i], i)
+	}
+}
+
+func BenchmarkAccess(b *testing.B) {
+	c := lfucache.New(b.N)
+
+	keys := make([]string, b.N)
+	for i := 0; i < b.N; i++ {
+		keys[i] = fmt.Sprintf("k%d", i)
+	}
+	for i := 0; i < b.N; i++ {
+		c.Insert(keys[i], i)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		c.Access(keys[i])
+	}
+}
+

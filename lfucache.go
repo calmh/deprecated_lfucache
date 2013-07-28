@@ -1,9 +1,14 @@
 package lfucache
 
-import "container/list"
+import (
+	"container/list"
+	"sync"
+)
 
 // Cache is a LFU cache structure.
 type Cache struct {
+	sync.Mutex
+	threadUnsafe  bool
 	maxItems      int
 	numItems      int
 	frequencyList *frequencyNode
@@ -39,21 +44,29 @@ type node struct {
 	prev   *node
 }
 
-// Create a new LFU Cache structure.
-func Create(maxItems int) *Cache {
+// New initializes a new LFU Cache structure.
+func New(maxItems int) *Cache {
+	if maxItems == 0 {
+		panic("cannot create zero-sized cache")
+	}
 	c := Cache{}
 	c.maxItems = maxItems
 	c.index = make(map[string]*node)
-	c.frequencyList = &frequencyNode{0, nil, nil, nil}
+	c.frequencyList = &frequencyNode{}
 	c.evictedChans = list.New()
 	return &c
 }
 
-// Inserts an item into the cache and returns true. Does nothing and returns
-// false if the key already exists in the cache.
-func (c *Cache) Insert(key string, value interface{}) bool {
-	if _, ok := c.index[key]; ok {
-		return false
+// Insert inserts an item into the cache.
+// If the key already exists, the existing item is evicted and the new one inserted.
+func (c *Cache) Insert(key string, value interface{}) {
+	if !c.threadUnsafe {
+		c.Lock()
+		defer c.Unlock()
+	}
+
+	if n, ok := c.index[key]; ok {
+		c.evict(n)
 	}
 
 	if c.numItems == c.maxItems {
@@ -67,22 +80,32 @@ func (c *Cache) Insert(key string, value interface{}) bool {
 	c.moveNodeToFn(n, c.frequencyList)
 	c.numItems++
 	c.stats.Inserts++
-	return true
 }
 
-// Deletes an item from the cache and returns true. Does nothing and returns
-// false if the key is not present in the cache.
-func (c *Cache) Delete(key string) {
+// Delete deletes an item from the cache and returns true. Does nothing and
+// returns false if the key was not present in the cache.
+func (c *Cache) Delete(key string) bool {
+	if !c.threadUnsafe {
+		c.Lock()
+		defer c.Unlock()
+	}
+
 	n, ok := c.index[key]
 	if ok {
 		c.deleteNode(n)
 		c.stats.Deletes++
 	}
+	return ok
 }
 
 // Access an item in the cache. Returns "value, ok" similar to map indexing.
 // Increases the item's use count.
 func (c *Cache) Access(key string) (interface{}, bool) {
+	if !c.threadUnsafe {
+		c.Lock()
+		defer c.Unlock()
+	}
+
 	n, ok := c.index[key]
 	if !ok {
 		c.stats.Misses++
@@ -103,28 +126,48 @@ func (c *Cache) Access(key string) (interface{}, bool) {
 	return n.value, true
 }
 
-// Returns the cache statistics.
+// Statistics returns the cache statistics.
 func (c *Cache) Statistics() Statistics {
+	if !c.threadUnsafe {
+		c.Lock()
+		defer c.Unlock()
+	}
+
 	c.stats.Items = c.numItems
 	c.stats.ItemsFreq0 = c.items0()
 	c.stats.FreqListLen = c.numFrequencyNodes()
+	if c.stats.Items > 1 && c.stats.FreqListLen > c.stats.Items+1 {
+		c.print()
+		panic("bug: len(frequency list) > numItems")
+	}
 	return c.stats
 }
 
-// Returns a new channel used to report items that get evicted from the cache.
-// Only items evicted due to LFU or EvictIf() will be sent on the channel, not
-// items removed by calling Delete(). The channel must be unregistered using
-// UnregisterEvictions() prior to ceasing reads in order to avoid deadlocking
-// evictions.
+// Evictions returns a new channel used to report items that get evicted from
+// the cache.  Only items evicted due to LFU or EvictIf() will be sent on the
+// channel, not items removed by calling Delete(). The channel must be
+// unregistered using UnregisterEvictions() prior to ceasing reads in order to
+// avoid deadlocking evictions.
 func (c *Cache) Evictions() <-chan interface{} {
+	if !c.threadUnsafe {
+		c.Lock()
+		defer c.Unlock()
+	}
+
 	exp := make(chan interface{})
 	c.evictedChans.PushBack(exp)
 	return exp
 }
 
-// Removes the channel from the list of channels to be notified on item eviction.
-// Must be called when there is no longer a reader for the channel in question.
+// UnregisterEvictions removes the channel from the list of channels to be
+// notified on item eviction.  Must be called when there is no longer a reader
+// for the channel in question.
 func (c *Cache) UnregisterEvictions(exp <-chan interface{}) {
+	if !c.threadUnsafe {
+		c.Lock()
+		defer c.Unlock()
+	}
+
 	for el := c.evictedChans.Front(); el != nil; el = el.Next() {
 		if el.Value.(chan interface{}) == exp {
 			c.evictedChans.Remove(el)
@@ -133,9 +176,14 @@ func (c *Cache) UnregisterEvictions(exp <-chan interface{}) {
 	}
 }
 
-// Applies test to each item in the cache and evicts it if the test returns true.
-// Returns the number of items that was evicted.
+// EvictIf applies test to each item in the cache and evicts it if the test
+// returns true.  Returns the number of items that was evicted.
 func (c *Cache) EvictIf(test func(interface{}) bool) int {
+	if !c.threadUnsafe {
+		c.Lock()
+		defer c.Unlock()
+	}
+
 	cnt := 0
 	for _, n := range c.index {
 		if test(n.value) {
@@ -144,6 +192,16 @@ func (c *Cache) EvictIf(test func(interface{}) bool) int {
 		}
 	}
 	return cnt
+}
+
+// DisableLocking disables the mutex that protects the cache structure from
+// corruption by simultaneous modification. If you are certain that thread
+// operations are only ever performed from a single goroutine this will
+// somewhat improve the performance of all operations. The difference is
+// negligible on basically everything except Access which is cheap enough to
+// make the locking visible in a benchmark.
+func (c *Cache) DisableLocking() {
+	c.threadUnsafe = true
 }
 
 func (c *Cache) items0() int {
@@ -171,16 +229,19 @@ func (c *Cache) deleteNode(n *node) {
 		n.next.prev = n.prev
 	}
 
-	if n.parent.nodeList == n {
-		n.parent.nodeList = n.next
+	fn := n.parent
+	if fn.nodeList == n {
+		fn.nodeList = n.next
+	}
+
+	// Delete empty non-head frequency node
+	if fn.usage != 0 && fn.nodeList == nil {
+		c.deleteFrequencyNode(fn)
 	}
 
 	delete(c.index, n.key)
 	c.numItems--
 
-	if n.parent.usage != 0 && n.parent.nodeList == nil {
-		c.deleteFrequencyNode(n.parent)
-	}
 }
 
 func (c *Cache) lfu() *node {
@@ -190,7 +251,7 @@ func (c *Cache) lfu() *node {
 		}
 	}
 
-	panic("call to lfu() on empty cache")
+	panic("bug: call to lfu() on empty cache")
 }
 
 func (c *Cache) newFrequencyNode(usage int, prev, next *frequencyNode) *frequencyNode {
