@@ -1,13 +1,11 @@
 package lfucache
 
 import (
-	"fmt"
 	"testing"
 )
 
 func TestMinimalFrequencyNodesDuringAccess(t *testing.T) {
 	c := New(10)
-	c.EnableChecking()
 
 	c.Insert("test1", 42) // usage=1
 	c.Insert("test2", 43) // usage=1
@@ -44,7 +42,6 @@ func TestMinimalFrequencyNodesDuringAccess(t *testing.T) {
 
 func TestMinimalFrequencyNodesDuringDelete1(t *testing.T) {
 	c := New(10)
-	c.EnableChecking()
 
 	c.Insert("test1", 42) // usage=1
 	c.Insert("test2", 43) // usage=1
@@ -81,7 +78,6 @@ func TestMinimalFrequencyNodesDuringDelete1(t *testing.T) {
 
 func TestMinimalFrequencyNodesDuringDelete2(t *testing.T) {
 	c := New(10)
-	c.EnableChecking()
 
 	c.Insert("test1", 42) // usage=1
 	c.Insert("test2", 43) // usage=1
@@ -113,38 +109,5 @@ func TestMinimalFrequencyNodesDuringDelete2(t *testing.T) {
 
 	if n := c.numFrequencyNodes(); n != 2 {
 		t.Errorf("Non-minimal number of frequency nodes %d\n", n)
-	}
-}
-
-func BenchmarkInsertUnsafe(b *testing.B) {
-	c := New(b.N)
-	c.threadUnsafe = true
-
-	keys := make([]string, b.N)
-	for i := 0; i < b.N; i++ {
-		keys[i] = fmt.Sprintf("k%d", i)
-	}
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		c.Insert(keys[i], i)
-	}
-}
-
-func BenchmarkAccessUnsafe(b *testing.B) {
-	c := New(b.N)
-	c.threadUnsafe = true
-
-	keys := make([]string, b.N)
-	for i := 0; i < b.N; i++ {
-		keys[i] = fmt.Sprintf("k%d", i)
-	}
-	for i := 0; i < b.N; i++ {
-		c.Insert(keys[i], i)
-	}
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		c.Access(keys[i])
 	}
 }

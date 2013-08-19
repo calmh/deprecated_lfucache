@@ -8,8 +8,6 @@ import (
 // Cache is a LFU cache structure.
 type Cache struct {
 	sync.Mutex
-	threadUnsafe  bool
-	checked       bool
 	maxItems      int
 	numItems      int
 	frequencyList *frequencyNode
@@ -62,14 +60,10 @@ func New(maxItems int) *Cache {
 // Insert inserts an item into the cache.
 // If the key already exists, the existing item is evicted and the new one inserted.
 func (c *Cache) Insert(key string, value interface{}) {
-	if !c.threadUnsafe {
-		c.Lock()
-		defer c.Unlock()
-	}
-	if c.checked {
-		c.check()
-		defer c.check()
-	}
+	c.Lock()
+	defer c.Unlock()
+
+	c.check()
 
 	if n, ok := c.index[key]; ok {
 		c.evict(n)
@@ -86,39 +80,36 @@ func (c *Cache) Insert(key string, value interface{}) {
 	c.moveNodeToFn(n, c.frequencyList)
 	c.numItems++
 	c.stats.Inserts++
+
+	c.check()
 }
 
 // Delete deletes an item from the cache and returns true. Does nothing and
 // returns false if the key was not present in the cache.
 func (c *Cache) Delete(key string) bool {
-	if !c.threadUnsafe {
-		c.Lock()
-		defer c.Unlock()
-	}
-	if c.checked {
-		c.check()
-		defer c.check()
-	}
+	c.Lock()
+	defer c.Unlock()
+
+	c.check()
 
 	n, ok := c.index[key]
 	if ok {
 		c.deleteNode(n)
 		c.stats.Deletes++
 	}
+
+	c.check()
+
 	return ok
 }
 
 // Access an item in the cache. Returns "value, ok" similar to map indexing.
 // Increases the item's use count.
 func (c *Cache) Access(key string) (interface{}, bool) {
-	if !c.threadUnsafe {
-		c.Lock()
-		defer c.Unlock()
-	}
-	if c.checked {
-		c.check()
-		defer c.check()
-	}
+	c.Lock()
+	defer c.Unlock()
+
+	c.check()
 
 	n, ok := c.index[key]
 	if !ok {
@@ -136,19 +127,18 @@ func (c *Cache) Access(key string) (interface{}, bool) {
 
 	c.moveNodeToFn(n, nextFn)
 	c.stats.Hits++
+
+	c.check()
+
 	return n.value, true
 }
 
 // Statistics returns the cache statistics.
 func (c *Cache) Statistics() Statistics {
-	if !c.threadUnsafe {
-		c.Lock()
-		defer c.Unlock()
-	}
-	if c.checked {
-		c.check()
-		defer c.check()
-	}
+	c.Lock()
+	defer c.Unlock()
+
+	c.check()
 
 	c.stats.Items = c.numItems
 	c.stats.ItemsFreq0 = c.items0()
@@ -162,14 +152,10 @@ func (c *Cache) Statistics() Statistics {
 // unregistered using UnregisterEvictions() prior to ceasing reads in order to
 // avoid deadlocking evictions.
 func (c *Cache) Evictions() <-chan interface{} {
-	if !c.threadUnsafe {
-		c.Lock()
-		defer c.Unlock()
-	}
-	if c.checked {
-		c.check()
-		defer c.check()
-	}
+	c.Lock()
+	defer c.Unlock()
+
+	c.check()
 
 	exp := make(chan interface{})
 	c.evictedChans.PushBack(exp)
@@ -180,14 +166,10 @@ func (c *Cache) Evictions() <-chan interface{} {
 // notified on item eviction.  Must be called when there is no longer a reader
 // for the channel in question.
 func (c *Cache) UnregisterEvictions(exp <-chan interface{}) {
-	if !c.threadUnsafe {
-		c.Lock()
-		defer c.Unlock()
-	}
-	if c.checked {
-		c.check()
-		defer c.check()
-	}
+	c.Lock()
+	defer c.Unlock()
+
+	c.check()
 
 	for el := c.evictedChans.Front(); el != nil; el = el.Next() {
 		if el.Value.(chan interface{}) == exp {
@@ -200,14 +182,10 @@ func (c *Cache) UnregisterEvictions(exp <-chan interface{}) {
 // EvictIf applies test to each item in the cache and evicts it if the test
 // returns true.  Returns the number of items that was evicted.
 func (c *Cache) EvictIf(test func(interface{}) bool) int {
-	if !c.threadUnsafe {
-		c.Lock()
-		defer c.Unlock()
-	}
-	if c.checked {
-		c.check()
-		defer c.check()
-	}
+	c.Lock()
+	defer c.Unlock()
+
+	c.check()
 
 	cnt := 0
 	for _, n := range c.index {
@@ -216,23 +194,10 @@ func (c *Cache) EvictIf(test func(interface{}) bool) int {
 			cnt++
 		}
 	}
+
+	c.check()
+
 	return cnt
-}
-
-// DisableLocking disables the mutex that protects the cache structure from
-// corruption by simultaneous modification. If you are certain that thread
-// operations are only ever performed from a single goroutine this will
-// somewhat improve the performance of all operations. The difference is
-// negligible on basically everything except Access which is cheap enough to
-// make the locking visible in a benchmark.
-func (c *Cache) DisableLocking() {
-	c.threadUnsafe = true
-}
-
-// Enable full integrity check of the cache structure after each operation.
-// Slow, only useful for debugging suspected problems with the cache algorithm.
-func (c *Cache) EnableChecking() {
-	c.checked = true
 }
 
 func (c *Cache) items0() int {
@@ -339,45 +304,4 @@ func (c *Cache) numFrequencyNodes() int {
 		count++
 	}
 	return count
-}
-
-func (c *Cache) check() {
-	if c.numItems != len(c.index) {
-		c.print()
-		panic("bug: index/numItems mismatch")
-	}
-
-	count := 0
-	var prevFn *frequencyNode
-	for fn := c.frequencyList; fn != nil; fn = fn.next {
-		if fn.nodeList == nil && fn.usage != 0 {
-			c.print()
-			panic("bug: empty non-head frequency node")
-		}
-		if fn.prev != prevFn {
-			c.print()
-			panic("incorrect prev frequencyNode pointer")
-		}
-
-		var prev *node
-		for n := fn.nodeList; n != nil; n = n.next {
-			if n.parent != fn {
-				c.print()
-				panic("incorrect parent pointer")
-			}
-			if n.prev != prev {
-				c.print()
-				panic("incorrect prev node pointer")
-			}
-			prev = n
-			count++
-		}
-
-		prevFn = fn
-	}
-
-	if count != len(c.index) {
-		c.print()
-		panic("bug: index/item count mismatch")
-	}
 }

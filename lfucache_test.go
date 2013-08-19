@@ -1,10 +1,10 @@
 package lfucache_test
 
 import (
+	"fmt"
 	"github.com/calmh/lfucache"
 	"testing"
 	"testing/quick"
-	"fmt"
 )
 
 func TestInstantiateCache(t *testing.T) {
@@ -13,7 +13,6 @@ func TestInstantiateCache(t *testing.T) {
 
 func TestInsertAccess(t *testing.T) {
 	c := lfucache.New(10)
-	c.EnableChecking()
 
 	c.Insert("test", 42)
 	v, _ := c.Access("test")
@@ -24,7 +23,6 @@ func TestInsertAccess(t *testing.T) {
 
 func TestExpiry(t *testing.T) {
 	c := lfucache.New(3)
-	c.EnableChecking()
 
 	c.Insert("test1", 42) // usage=1
 	c.Access("test1")     // usage=2
@@ -68,7 +66,6 @@ func TestExpiry(t *testing.T) {
 
 func TestDelete(t *testing.T) {
 	c := lfucache.New(3)
-	c.EnableChecking()
 
 	c.Insert("test1", 42) // usage=1
 	c.Access("test1")     // usage=2
@@ -96,7 +93,6 @@ func TestDelete(t *testing.T) {
 
 func TestDoubleInsert(t *testing.T) {
 	c := lfucache.New(3)
-	c.EnableChecking()
 
 	c.Insert("test1", 42)
 	c.Insert("test1", 43)
@@ -119,7 +115,6 @@ func TestDoubleInsert(t *testing.T) {
 
 func TestEvictionsChannel(t *testing.T) {
 	c := lfucache.New(3)
-	c.EnableChecking()
 
 	exp := c.Evictions()
 
@@ -169,7 +164,6 @@ func TestEvictionsChannel(t *testing.T) {
 
 func TestStats(t *testing.T) {
 	c := lfucache.New(3)
-	c.EnableChecking()
 
 	c.Access("test1")
 	c.Access("test2")
@@ -228,7 +222,6 @@ func TestStats(t *testing.T) {
 
 func TestEvictIf(t *testing.T) {
 	c := lfucache.New(10)
-	c.EnableChecking()
 
 	c.Insert("test1", 42)
 	c.Insert("test2", 43)
@@ -263,7 +256,6 @@ func TestEvictIf(t *testing.T) {
 
 func TestRandomAccess(t *testing.T) {
 	c := lfucache.New(1024)
-	c.EnableChecking()
 
 	quick.Check(func(key string, val int) bool {
 		c.Insert(key, val)
@@ -303,4 +295,3 @@ func BenchmarkAccess(b *testing.B) {
 		c.Access(keys[i])
 	}
 }
-

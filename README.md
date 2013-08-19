@@ -13,6 +13,8 @@ listeners via channels, and manually evicting all cache items matching a
 criteria. This is useful for example when using the package as a write cache for
 a database, where items must be written to the backing store on eviction.
 
+It is safe to make calls on the cache concurrently from multiple goroutines.
+
 ### Example
 
     c := lfucache.Create(1024)
@@ -60,26 +62,6 @@ func (c *Cache) Delete(key string) bool
 ```
 Delete deletes an item from the cache and returns true. Does nothing and returns
 false if the key was not present in the cache.
-
-#### func (*Cache) DisableLocking
-
-```go
-func (c *Cache) DisableLocking()
-```
-DisableLocking disables the mutex that protects the cache structure from
-corruption by simultaneous modification. If you are certain that thread
-operations are only ever performed from a single goroutine this will somewhat
-improve the performance of all operations. The difference is negligible on
-basically everything except Access which is cheap enough to make the locking
-visible in a benchmark.
-
-#### func (*Cache) EnableChecking
-
-```go
-func (c *Cache) EnableChecking()
-```
-Enable full integrity check of the cache structure after each operation. Slow,
-only useful for debugging suspected problems with the cache algorithm.
 
 #### func (*Cache) EvictIf
 
