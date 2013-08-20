@@ -3,6 +3,9 @@ package lfucache_test
 import (
 	"fmt"
 	"github.com/calmh/lfucache"
+	"math/rand"
+	"runtime"
+	"sync"
 	"testing"
 	"testing/quick"
 )
@@ -257,12 +260,48 @@ func TestEvictIf(t *testing.T) {
 func TestRandomAccess(t *testing.T) {
 	c := lfucache.New(1024)
 
-	quick.Check(func(key string, val int) bool {
+	err := quick.Check(func(key string, val int) bool {
 		c.Insert(key, val)
-		c.Statistics()
 		v, ok := c.Access(key)
 		return ok && v.(int) == val
 	}, &quick.Config{MaxCount: 100000})
+
+	if err != nil {
+		t.Error(err)
+	}
+}
+
+func TestParallellAccess(t *testing.T) {
+	n := 5000
+	k := 16
+	m := 50
+
+	c := lfucache.New(n)
+
+	keys := make([]string, n)
+	for i := 0; i < n; i++ {
+		keys[i] = fmt.Sprintf("k%d", i)
+	}
+
+	runtime.GOMAXPROCS(k)
+	var wg sync.WaitGroup
+	wg.Add(k)
+
+	for i := 0; i < k; i++ {
+		go func() {
+			for j := 0; j < n*m; j++ {
+				idx := rand.Int31n(int32(n))
+				v, ok := c.Access(keys[idx])
+				if !ok {
+					c.Insert(keys[idx], idx)
+				} else if v != idx {
+					t.Errorf("key mismatch %d != %d", v, idx)
+				}
+			}
+			wg.Done()
+		}()
+	}
+	wg.Wait()
 }
 
 func BenchmarkInsert(b *testing.B) {

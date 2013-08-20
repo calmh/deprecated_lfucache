@@ -34,7 +34,6 @@ The MIT license.
 
 ```go
 type Cache struct {
-	sync.Mutex
 }
 ```
 
