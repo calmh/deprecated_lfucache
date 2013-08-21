@@ -54,6 +54,13 @@ func (c *Cache) Access(key string) (interface{}, bool)
 Access an item in the cache. Returns "value, ok" similar to map indexing.
 Increases the item's use count.
 
+#### func (*Cache) Cap
+
+```go
+func (c *Cache) Cap() int
+```
+Cap returns the maximum number of items the cache will hold.
+
 #### func (*Cache) Delete
 
 ```go
@@ -89,6 +96,13 @@ func (c *Cache) Insert(key string, value interface{})
 Insert inserts an item into the cache. If the key already exists, the existing
 item is evicted and the new one inserted.
 
+#### func (*Cache) Len
+
+```go
+func (c *Cache) Len() int
+```
+Len returns the number of items currently stored in the cache.
+
 #### func (*Cache) Resize
 
 ```go
@@ -116,8 +130,6 @@ channel in question.
 
 ```go
 type Statistics struct {
-	Cap         int // Maximum number of items the cache will hold
-	Len         int // Number of items currently in the cache
 	LenFreq0    int // Number of items at frequency zero, i.e Inserted but not Accessed
 	Inserts     int // Number of Insert()s
 	Hits        int // Number of hits (Access() to item)

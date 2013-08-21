@@ -81,11 +81,27 @@ func TestResize(t *testing.T) {
 
 	c.Insert("test4", 45) // usage=0
 
+	if cp := c.Cap(); cp != 10 {
+		t.Errorf("incorrect cap, %d", cp)
+	}
+
+	if ln := c.Len(); ln != 4 {
+		t.Errorf("incorrect length, %d", ln)
+	}
+
 	if s := c.Statistics(); s.Evictions != 0 {
 		t.Errorf("premature evictions, %d", s.Evictions)
 	}
 
 	c.Resize(2)
+
+	if cp := c.Cap(); cp != 2 {
+		t.Errorf("incorrect cap, %d", cp)
+	}
+
+	if ln := c.Len(); ln != 2 {
+		t.Errorf("incorrect length, %d", ln)
+	}
 
 	if s := c.Statistics(); s.Evictions != 2 {
 		t.Errorf("missed evictions, %d", s.Evictions)
@@ -142,7 +158,7 @@ func TestDoubleInsert(t *testing.T) {
 	c.Insert("test1", 43)
 	c.Insert("test1", 44)
 
-	if c.Statistics().Len != 1 {
+	if c.Len() != 1 {
 		t.Error("Unexpected size")
 	}
 
@@ -152,7 +168,7 @@ func TestDoubleInsert(t *testing.T) {
 
 	c.Delete("test1")
 
-	if c.Statistics().Len != 0 {
+	if c.Len() != 0 {
 		t.Error("Unexpected size")
 	}
 }
@@ -239,9 +255,6 @@ func TestStats(t *testing.T) {
 
 	stats := c.Statistics()
 
-	if stats.Len != 2 {
-		t.Errorf("Stats items incorrect, %d", stats.Len)
-	}
 	if stats.LenFreq0 != 1 {
 		t.Errorf("Stats itemsfreq0 incorrect, %d", stats.LenFreq0)
 	}

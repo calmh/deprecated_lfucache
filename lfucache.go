@@ -2,6 +2,7 @@ package lfucache
 
 import (
 	"container/list"
+	"errors"
 )
 
 // Cache is a LFU cache structure.
@@ -16,8 +17,6 @@ type Cache struct {
 
 // Current item counts and operation counters.
 type Statistics struct {
-	Cap         int // Maximum number of items the cache will hold
-	Len         int // Number of items currently in the cache
 	LenFreq0    int // Number of items at frequency zero, i.e Inserted but not Accessed
 	Inserts     int // Number of Insert()s
 	Hits        int // Number of hits (Access() to item)
@@ -42,15 +41,19 @@ type node struct {
 	prev   *node
 }
 
+var (
+	zeroSizeCache = errors.New("create zero-sized cache")
+	emptyLfu      = errors.New("lfu on empty cache")
+)
+
 // New initializes a new LFU Cache structure.
 func New(capacity int) *Cache {
 	if capacity == 0 {
-		panic("cannot create zero-sized cache")
+		panic(zeroSizeCache)
 	}
 
 	c := Cache{}
 	c.capacity = capacity
-	c.stats.Cap = capacity
 	c.index = make(map[string]*node, capacity)
 	c.frequencyList = &frequencyNode{}
 	return &c
@@ -64,8 +67,8 @@ func (c *Cache) Resize(capacity int) {
 	}
 }
 
-// Insert inserts an item into the cache.
-// If the key already exists, the existing item is evicted and the new one inserted.
+// Insert inserts an item into the cache. If the key already exists, the
+// existing item is evicted and the new one inserted.
 func (c *Cache) Insert(key string, value interface{}) {
 	c.check()
 
@@ -131,11 +134,20 @@ func (c *Cache) Access(key string) (interface{}, bool) {
 	return n.value, true
 }
 
+// Len returns the number of items currently stored in the cache.
+func (c *Cache) Len() int {
+	return c.length
+}
+
+// Cap returns the maximum number of items the cache will hold.
+func (c *Cache) Cap() int {
+	return c.capacity
+}
+
 // Statistics returns the cache statistics.
 func (c *Cache) Statistics() Statistics {
 	c.check()
 
-	c.stats.Len = c.length
 	c.stats.LenFreq0 = c.items0()
 	c.stats.FreqListLen = c.numFrequencyNodes()
 	return c.stats
@@ -230,7 +242,7 @@ func (c *Cache) lfu() *node {
 		}
 	}
 
-	panic("bug: call to lfu() on empty cache")
+	panic(emptyLfu)
 }
 
 func (c *Cache) newFrequencyNode(usage int, prev, next *frequencyNode) *frequencyNode {
