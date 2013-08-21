@@ -42,7 +42,7 @@ Cache is a LFU cache structure.
 #### func  New
 
 ```go
-func New(maxItems int) *Cache
+func New(capacity int) *Cache
 ```
 New initializes a new LFU Cache structure.
 
@@ -89,6 +89,13 @@ func (c *Cache) Insert(key string, value interface{})
 Insert inserts an item into the cache. If the key already exists, the existing
 item is evicted and the new one inserted.
 
+#### func (*Cache) Resize
+
+```go
+func (c *Cache) Resize(capacity int)
+```
+Resize the cache to a new capacity. When shrinking, items may get evicted.
+
 #### func (*Cache) Statistics
 
 ```go
@@ -109,8 +116,9 @@ channel in question.
 
 ```go
 type Statistics struct {
-	Items       int // Number of items currently in the cache
-	ItemsFreq0  int // Number of items at frequency zero, i.e Inserted but not Accessed
+	Cap         int // Maximum number of items the cache will hold
+	Len         int // Number of items currently in the cache
+	LenFreq0    int // Number of items at frequency zero, i.e Inserted but not Accessed
 	Inserts     int // Number of Insert()s
 	Hits        int // Number of hits (Access() to item)
 	Misses      int // Number of misses (Access() to non-existant key)

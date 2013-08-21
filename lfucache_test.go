@@ -67,6 +67,47 @@ func TestExpiry(t *testing.T) {
 	}
 }
 
+func TestResize(t *testing.T) {
+	c := lfucache.New(10)
+
+	c.Insert("test1", 42) // usage=0
+	c.Access("test1")     // usage=1
+	c.Access("test1")     // usage=2
+
+	c.Insert("test2", 43) // usage=0
+
+	c.Insert("test3", 44) // usage=0
+	c.Access("test3")     // usage=1
+
+	c.Insert("test4", 45) // usage=0
+
+	if s := c.Statistics(); s.Evictions != 0 {
+		t.Errorf("premature evictions, %d", s.Evictions)
+	}
+
+	c.Resize(2)
+
+	if s := c.Statistics(); s.Evictions != 2 {
+		t.Errorf("missed evictions, %d", s.Evictions)
+	}
+
+	if _, ok := c.Access("test2"); ok {
+		t.Error("Node test2 was not removed")
+	}
+
+	if _, ok := c.Access("test4"); ok {
+		t.Error("Node test4 was not removed")
+	}
+
+	if v, _ := c.Access("test1"); v.(int) != 42 {
+		t.Error("Didn't get the right value back from the cache (test1)")
+	}
+
+	if v, _ := c.Access("test3"); v.(int) != 44 {
+		t.Error("Didn't get the right value back from the cache (test3)")
+	}
+}
+
 func TestDelete(t *testing.T) {
 	c := lfucache.New(3)
 
@@ -101,7 +142,7 @@ func TestDoubleInsert(t *testing.T) {
 	c.Insert("test1", 43)
 	c.Insert("test1", 44)
 
-	if c.Statistics().Items != 1 {
+	if c.Statistics().Len != 1 {
 		t.Error("Unexpected size")
 	}
 
@@ -111,7 +152,7 @@ func TestDoubleInsert(t *testing.T) {
 
 	c.Delete("test1")
 
-	if c.Statistics().Items != 0 {
+	if c.Statistics().Len != 0 {
 		t.Error("Unexpected size")
 	}
 }
@@ -198,11 +239,11 @@ func TestStats(t *testing.T) {
 
 	stats := c.Statistics()
 
-	if stats.Items != 2 {
-		t.Errorf("Stats items incorrect, %d", stats.Items)
+	if stats.Len != 2 {
+		t.Errorf("Stats items incorrect, %d", stats.Len)
 	}
-	if stats.ItemsFreq0 != 1 {
-		t.Errorf("Stats itemsfreq0 incorrect, %d", stats.ItemsFreq0)
+	if stats.LenFreq0 != 1 {
+		t.Errorf("Stats itemsfreq0 incorrect, %d", stats.LenFreq0)
 	}
 	if stats.Inserts != 5 {
 		t.Errorf("Stats inserts incorrect, %d", stats.Inserts)

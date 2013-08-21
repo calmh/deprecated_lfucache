@@ -6,8 +6,8 @@ import (
 
 // Cache is a LFU cache structure.
 type Cache struct {
-	maxItems      int
-	numItems      int
+	capacity      int
+	length        int
 	frequencyList *frequencyNode
 	index         map[string]*node
 	evictedChans  list.List
@@ -16,8 +16,9 @@ type Cache struct {
 
 // Current item counts and operation counters.
 type Statistics struct {
-	Items       int // Number of items currently in the cache
-	ItemsFreq0  int // Number of items at frequency zero, i.e Inserted but not Accessed
+	Cap         int // Maximum number of items the cache will hold
+	Len         int // Number of items currently in the cache
+	LenFreq0    int // Number of items at frequency zero, i.e Inserted but not Accessed
 	Inserts     int // Number of Insert()s
 	Hits        int // Number of hits (Access() to item)
 	Misses      int // Number of misses (Access() to non-existant key)
@@ -42,16 +43,25 @@ type node struct {
 }
 
 // New initializes a new LFU Cache structure.
-func New(maxItems int) *Cache {
-	if maxItems == 0 {
+func New(capacity int) *Cache {
+	if capacity == 0 {
 		panic("cannot create zero-sized cache")
 	}
 
 	c := Cache{}
-	c.maxItems = maxItems
-	c.index = make(map[string]*node)
+	c.capacity = capacity
+	c.stats.Cap = capacity
+	c.index = make(map[string]*node, capacity)
 	c.frequencyList = &frequencyNode{}
 	return &c
+}
+
+// Resize the cache to a new capacity. When shrinking, items may get evicted.
+func (c *Cache) Resize(capacity int) {
+	c.capacity = capacity
+	for c.length > c.capacity {
+		c.evict(c.lfu())
+	}
 }
 
 // Insert inserts an item into the cache.
@@ -63,7 +73,7 @@ func (c *Cache) Insert(key string, value interface{}) {
 		c.evict(n)
 	}
 
-	if c.numItems == c.maxItems {
+	if c.length == c.capacity {
 		c.evict(c.lfu())
 	}
 
@@ -72,7 +82,7 @@ func (c *Cache) Insert(key string, value interface{}) {
 	n.value = value
 	c.index[key] = n
 	c.moveNodeToFn(n, c.frequencyList)
-	c.numItems++
+	c.length++
 	c.stats.Inserts++
 
 	c.check()
@@ -125,8 +135,8 @@ func (c *Cache) Access(key string) (interface{}, bool) {
 func (c *Cache) Statistics() Statistics {
 	c.check()
 
-	c.stats.Items = c.numItems
-	c.stats.ItemsFreq0 = c.items0()
+	c.stats.Len = c.length
+	c.stats.LenFreq0 = c.items0()
 	c.stats.FreqListLen = c.numFrequencyNodes()
 	return c.stats
 }
@@ -210,7 +220,7 @@ func (c *Cache) deleteNode(n *node) {
 	}
 
 	delete(c.index, n.key)
-	c.numItems--
+	c.length--
 }
 
 func (c *Cache) lfu() *node {
@@ -253,12 +263,13 @@ func (c *Cache) moveNodeToFn(n *node, fn *frequencyNode) {
 		n.next.prev = n.prev
 	}
 
-	if n.parent != nil && n.parent.nodeList == n {
-		n.parent.nodeList = n.next
-	}
-
-	if n.parent != nil && n.parent.usage != 0 && n.parent.nodeList == nil {
-		c.deleteFrequencyNode(n.parent)
+	if n.parent != nil {
+		if n.parent.nodeList == n {
+			n.parent.nodeList = n.next
+		}
+		if n.parent.nodeList == nil && n.parent.usage != 0 {
+			c.deleteFrequencyNode(n.parent)
+		}
 	}
 
 	n.prev = nil
