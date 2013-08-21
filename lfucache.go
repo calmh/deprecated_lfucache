@@ -10,7 +10,7 @@ type Cache struct {
 	numItems      int
 	frequencyList *frequencyNode
 	index         map[string]*node
-	evictedChans  *list.List
+	evictedChans  list.List
 	stats         Statistics
 }
 
@@ -51,7 +51,6 @@ func New(maxItems int) *Cache {
 	c.maxItems = maxItems
 	c.index = make(map[string]*node)
 	c.frequencyList = &frequencyNode{}
-	c.evictedChans = list.New()
 	return &c
 }
 
@@ -132,27 +131,25 @@ func (c *Cache) Statistics() Statistics {
 	return c.stats
 }
 
-// Evictions returns a new channel used to report items that get evicted from
+// Evictions registers a channel used to report items that get evicted from
 // the cache.  Only items evicted due to LFU or EvictIf() will be sent on the
 // channel, not items removed by calling Delete(). The channel must be
 // unregistered using UnregisterEvictions() prior to ceasing reads in order to
 // avoid deadlocking evictions.
-func (c *Cache) Evictions() <-chan interface{} {
+func (c *Cache) Evictions(e chan<- interface{}) {
 	c.check()
 
-	exp := make(chan interface{})
-	c.evictedChans.PushBack(exp)
-	return exp
+	c.evictedChans.PushBack(e)
 }
 
 // UnregisterEvictions removes the channel from the list of channels to be
 // notified on item eviction.  Must be called when there is no longer a reader
 // for the channel in question.
-func (c *Cache) UnregisterEvictions(exp <-chan interface{}) {
+func (c *Cache) UnregisterEvictions(e chan<- interface{}) {
 	c.check()
 
 	for el := c.evictedChans.Front(); el != nil; el = el.Next() {
-		if el.Value.(chan interface{}) == exp {
+		if el.Value.(chan<- interface{}) == e {
 			c.evictedChans.Remove(el)
 			return
 		}
@@ -187,7 +184,7 @@ func (c *Cache) items0() int {
 
 func (c *Cache) evict(n *node) {
 	for c := c.evictedChans.Front(); c != nil; c = c.Next() {
-		c.Value.(chan interface{}) <- n.value
+		c.Value.(chan<- interface{}) <- n.value
 	}
 	c.deleteNode(n)
 	c.stats.Evictions++

@@ -73,9 +73,9 @@ true. Returns the number of items that was evicted.
 #### func (*Cache) Evictions
 
 ```go
-func (c *Cache) Evictions() <-chan interface{}
+func (c *Cache) Evictions(e chan<- interface{})
 ```
-Evictions returns a new channel used to report items that get evicted from the
+Evictions registers a channel used to report items that get evicted from the
 cache. Only items evicted due to LFU or EvictIf() will be sent on the channel,
 not items removed by calling Delete(). The channel must be unregistered using
 UnregisterEvictions() prior to ceasing reads in order to avoid deadlocking
@@ -99,7 +99,7 @@ Statistics returns the cache statistics.
 #### func (*Cache) UnregisterEvictions
 
 ```go
-func (c *Cache) UnregisterEvictions(exp <-chan interface{})
+func (c *Cache) UnregisterEvictions(e chan<- interface{})
 ```
 UnregisterEvictions removes the channel from the list of channels to be notified
 on item eviction. Must be called when there is no longer a reader for the

@@ -119,7 +119,8 @@ func TestDoubleInsert(t *testing.T) {
 func TestEvictionsChannel(t *testing.T) {
 	c := lfucache.New(3)
 
-	exp := c.Evictions()
+	exp := make(chan interface{})
+	c.Evictions(exp)
 
 	start := make(chan bool)
 	done := make(chan bool)
