@@ -8,8 +8,8 @@ import (
 type Cache struct {
 	maxItems      int
 	numItems      int
-	frequencyList *frequencyNode
-	index         map[string]*node
+	frequencyList list.List
+	index         map[string]*list.Element
 	evictedChans  list.List
 	stats         Statistics
 }
@@ -28,17 +28,13 @@ type Statistics struct {
 
 type frequencyNode struct {
 	usage    int
-	prev     *frequencyNode
-	next     *frequencyNode
-	nodeList *node
+	nodeList list.List
 }
 
 type node struct {
 	key    string
 	value  interface{}
-	parent *frequencyNode
-	next   *node
-	prev   *node
+	parent *list.Element
 }
 
 // New initializes a new LFU Cache structure.
@@ -49,47 +45,40 @@ func New(maxItems int) *Cache {
 
 	c := Cache{}
 	c.maxItems = maxItems
-	c.index = make(map[string]*node)
-	c.frequencyList = &frequencyNode{}
+	c.index = make(map[string]*list.Element)
+	c.frequencyList.PushFront(&frequencyNode{})
 	return &c
 }
 
 // Insert inserts an item into the cache.
 // If the key already exists, the existing item is evicted and the new one inserted.
 func (c *Cache) Insert(key string, value interface{}) {
-	c.check()
-
-	if n, ok := c.index[key]; ok {
-		c.evict(n)
+	if e, ok := c.index[key]; ok {
+		c.evict(e)
 	}
 
 	if c.numItems == c.maxItems {
 		c.evict(c.lfu())
 	}
 
-	n := &node{}
-	n.key = key
-	n.value = value
-	c.index[key] = n
-	c.moveNodeToFn(n, c.frequencyList)
+	fne := c.frequencyList.Front()
+	fnv := fn(fne)
+	nv := &node{key: key, value: value, parent: fne}
+	ne := fnv.nodeList.PushBack(nv)
+	c.index[key] = ne
 	c.numItems++
 	c.stats.Inserts++
 
-	c.check()
 }
 
 // Delete deletes an item from the cache and returns true. Does nothing and
 // returns false if the key was not present in the cache.
 func (c *Cache) Delete(key string) bool {
-	c.check()
-
-	n, ok := c.index[key]
+	e, ok := c.index[key]
 	if ok {
-		c.deleteNode(n)
+		c.deleteNode(e)
 		c.stats.Deletes++
 	}
-
-	c.check()
 
 	return ok
 }
@@ -97,34 +86,31 @@ func (c *Cache) Delete(key string) bool {
 // Access an item in the cache. Returns "value, ok" similar to map indexing.
 // Increases the item's use count.
 func (c *Cache) Access(key string) (interface{}, bool) {
-	c.check()
-
-	n, ok := c.index[key]
+	ne, ok := c.index[key]
 	if !ok {
 		c.stats.Misses++
 		return nil, false
 	}
 
-	nextUsage := n.parent.usage + 1
-	var nextFn *frequencyNode
-	if n.parent.next == nil || n.parent.next.usage != nextUsage {
-		nextFn = c.newFrequencyNode(nextUsage, n.parent, n.parent.next)
+	nv := n(ne)
+	nextUsage := fn(nv.parent).usage + 1
+	var nextFn *list.Element
+
+	if pe := nv.parent.Next(); pe == nil || fn(pe).usage != nextUsage {
+		newfn := &frequencyNode{usage: nextUsage}
+		nextFn = c.frequencyList.InsertAfter(newfn, nv.parent)
 	} else {
-		nextFn = n.parent.next
+		nextFn = pe
 	}
 
-	c.moveNodeToFn(n, nextFn)
+	c.moveNodeToFn(ne, nextFn)
 	c.stats.Hits++
 
-	c.check()
-
-	return n.value, true
+	return nv.value, true
 }
 
 // Statistics returns the cache statistics.
 func (c *Cache) Statistics() Statistics {
-	c.check()
-
 	c.stats.Items = c.numItems
 	c.stats.ItemsFreq0 = c.items0()
 	c.stats.FreqListLen = c.numFrequencyNodes()
@@ -137,8 +123,6 @@ func (c *Cache) Statistics() Statistics {
 // unregistered using UnregisterEvictions() prior to ceasing reads in order to
 // avoid deadlocking evictions.
 func (c *Cache) Evictions(e chan<- interface{}) {
-	c.check()
-
 	c.evictedChans.PushBack(e)
 }
 
@@ -146,8 +130,6 @@ func (c *Cache) Evictions(e chan<- interface{}) {
 // notified on item eviction.  Must be called when there is no longer a reader
 // for the channel in question.
 func (c *Cache) UnregisterEvictions(e chan<- interface{}) {
-	c.check()
-
 	for el := c.evictedChans.Front(); el != nil; el = el.Next() {
 		if el.Value.(chan<- interface{}) == e {
 			c.evictedChans.Remove(el)
@@ -159,123 +141,81 @@ func (c *Cache) UnregisterEvictions(e chan<- interface{}) {
 // EvictIf applies test to each item in the cache and evicts it if the test
 // returns true.  Returns the number of items that was evicted.
 func (c *Cache) EvictIf(test func(interface{}) bool) int {
-	c.check()
-
 	cnt := 0
-	for _, n := range c.index {
-		if test(n.value) {
-			c.evict(n)
+	for _, ne := range c.index {
+		if test(n(ne).value) {
+			c.evict(ne)
 			cnt++
 		}
 	}
-
-	c.check()
 
 	return cnt
 }
 
 func (c *Cache) items0() int {
-	cnt := 0
-	for n := c.frequencyList.nodeList; n != nil; n = n.next {
-		cnt++
-	}
-	return cnt
+	return fn(c.frequencyList.Front()).nodeList.Len()
 }
 
-func (c *Cache) evict(n *node) {
+func (c *Cache) evict(ne *list.Element) {
+	nv := n(ne)
 	for c := c.evictedChans.Front(); c != nil; c = c.Next() {
-		c.Value.(chan<- interface{}) <- n.value
+		c.Value.(chan<- interface{}) <- nv.value
 	}
-	c.deleteNode(n)
+	c.deleteNode(ne)
 	c.stats.Evictions++
 }
 
-func (c *Cache) deleteNode(n *node) {
-	if n.prev != nil {
-		n.prev.next = n.next
-	}
-
-	if n.next != nil {
-		n.next.prev = n.prev
-	}
-
-	fn := n.parent
-	if fn.nodeList == n {
-		fn.nodeList = n.next
-	}
+func (c *Cache) deleteNode(ne *list.Element) {
+	nv := n(ne)
+	pe := nv.parent
+	pv := fn(pe)
+	pv.nodeList.Remove(ne)
 
 	// Delete empty non-head frequency node
-	if fn.usage != 0 && fn.nodeList == nil {
-		c.deleteFrequencyNode(fn)
+	if pv.usage != 0 && pv.nodeList.Len() == 0 {
+		c.frequencyList.Remove(pe)
 	}
 
-	delete(c.index, n.key)
+	delete(c.index, nv.key)
 	c.numItems--
 }
 
-func (c *Cache) lfu() *node {
-	for fn := c.frequencyList; fn != nil; fn = fn.next {
-		if fn.nodeList != nil {
-			return fn.nodeList
+func (c *Cache) lfu() *list.Element {
+	for fne := c.frequencyList.Front(); fne != nil; fne = fne.Next() {
+		if ne := fn(fne).nodeList.Front(); ne != nil {
+			return ne
+		}
+	}
+	panic("no item to evict")
+}
+
+func (c *Cache) moveNodeToFn(ne *list.Element, fne *list.Element) {
+	nv := n(ne)
+	fnv := fn(fne)
+
+	if curPar := nv.parent; curPar != nil {
+		// Remove from existing parent
+		curParV := fn(curPar)
+		curParV.nodeList.Remove(ne)
+		if curParV.usage != 0 && curParV.nodeList.Len() == 0 {
+			// Delete empty parent
+			c.frequencyList.Remove(curPar)
 		}
 	}
 
-	panic("bug: call to lfu() on empty cache")
-}
-
-func (c *Cache) newFrequencyNode(usage int, prev, next *frequencyNode) *frequencyNode {
-	fn := &frequencyNode{usage, prev, next, nil}
-	if fn.prev != nil {
-		fn.prev.next = fn
-	}
-	if fn.next != nil {
-		fn.next.prev = fn
-	}
-	return fn
-}
-
-func (c *Cache) deleteFrequencyNode(fn *frequencyNode) {
-	if fn.next != nil {
-		fn.next.prev = fn.prev
-	}
-
-	if fn.prev != nil {
-		fn.prev.next = fn.next
-	}
-}
-
-func (c *Cache) moveNodeToFn(n *node, fn *frequencyNode) {
-	if n.prev != nil {
-		n.prev.next = n.next
-	}
-
-	if n.next != nil {
-		n.next.prev = n.prev
-	}
-
-	if n.parent != nil && n.parent.nodeList == n {
-		n.parent.nodeList = n.next
-	}
-
-	if n.parent != nil && n.parent.usage != 0 && n.parent.nodeList == nil {
-		c.deleteFrequencyNode(n.parent)
-	}
-
-	n.prev = nil
-	n.next = nil
-
-	n.parent = fn
-	if fn.nodeList != nil {
-		n.next = fn.nodeList
-		n.next.prev = n
-	}
-	fn.nodeList = n
+	nv.parent = fne
+	ne = fnv.nodeList.PushBack(nv)
+	c.index[nv.key] = ne
 }
 
 func (c *Cache) numFrequencyNodes() int {
-	count := 0
-	for fn := c.frequencyList; fn != nil; fn = fn.next {
-		count++
-	}
-	return count
+	return c.frequencyList.Len()
+}
+
+func n(e *list.Element) *node {
+	return e.Value.(*node)
+}
+
+func fn(e *list.Element) *frequencyNode {
+	return e.Value.(*frequencyNode)
 }
