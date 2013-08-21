@@ -3,9 +3,9 @@ package lfucache_test
 import (
 	"fmt"
 	"github.com/calmh/lfucache"
-	"math/rand"
-	"runtime"
-	"sync"
+	// "math/rand"
+	// "runtime"
+	// "sync"
 	"testing"
 	"testing/quick"
 )
@@ -271,38 +271,38 @@ func TestRandomAccess(t *testing.T) {
 	}
 }
 
-func TestParallellAccess(t *testing.T) {
-	n := 5000
-	k := 16
-	m := 50
+// func TestParallellAccess(t *testing.T) {
+// 	n := 5000
+// 	k := 16
+// 	m := 50
 
-	c := lfucache.New(n)
+// 	c := lfucache.New(n)
 
-	keys := make([]string, n)
-	for i := 0; i < n; i++ {
-		keys[i] = fmt.Sprintf("k%d", i)
-	}
+// 	keys := make([]string, n)
+// 	for i := 0; i < n; i++ {
+// 		keys[i] = fmt.Sprintf("k%d", i)
+// 	}
 
-	runtime.GOMAXPROCS(k)
-	var wg sync.WaitGroup
-	wg.Add(k)
+// 	runtime.GOMAXPROCS(k)
+// 	var wg sync.WaitGroup
+// 	wg.Add(k)
 
-	for i := 0; i < k; i++ {
-		go func() {
-			for j := 0; j < n*m; j++ {
-				idx := rand.Int31n(int32(n))
-				v, ok := c.Access(keys[idx])
-				if !ok {
-					c.Insert(keys[idx], idx)
-				} else if v != idx {
-					t.Errorf("key mismatch %d != %d", v, idx)
-				}
-			}
-			wg.Done()
-		}()
-	}
-	wg.Wait()
-}
+// 	for i := 0; i < k; i++ {
+// 		go func() {
+// 			for j := 0; j < n*m; j++ {
+// 				idx := rand.Int31n(int32(n))
+// 				v, ok := c.Access(keys[idx])
+// 				if !ok {
+// 					c.Insert(keys[idx], idx)
+// 				} else if v != idx {
+// 					t.Errorf("key mismatch %d != %d", v, idx)
+// 				}
+// 			}
+// 			wg.Done()
+// 		}()
+// 	}
+// 	wg.Wait()
+// }
 
 const cacheSize = 1e6
 
