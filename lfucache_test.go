@@ -168,29 +168,29 @@ func TestEvictionsChannel(t *testing.T) {
 func TestStats(t *testing.T) {
 	c := lfucache.New(3)
 
-	c.Access("test1")
-	c.Access("test2")
+	c.Access("test1") // miss
+	c.Access("test2") // miss
 
-	c.Insert("test1", 42) // usage=1
-	c.Access("test1")
-	c.Access("test1")
+	c.Insert("test1", 42) // usage=0
+	c.Access("test1")     // usage=1
+	c.Access("test1")     // usage=2
 
-	c.Insert("test2", 43) // usage=1
+	c.Insert("test2", 43) // usage=0
 
-	c.Insert("test3", 44) // usage=1
-	c.Access("test3")
+	c.Insert("test3", 44) // usage=0
+	c.Access("test3")     // usage=1
 
-	c.Access("test1")
-	c.Access("test2")
-	c.Access("test3")
+	c.Access("test1") // usage=3
+	c.Access("test2") // usage=1
+	c.Access("test3") // usage=2
 
 	// Will evict test2
-	c.Insert("test4", 45) // usage=1
+	c.Insert("test4", 45) // usage=0
 
-	c.Access("test2")
+	c.Access("test2") // miss
 
-	// Will evict test3
-	c.Insert("test5", 45) // usage=1
+	// Will evict test4
+	c.Insert("test5", 45) // usage=0
 
 	c.Delete("test1")
 	c.Delete("test2")
@@ -198,28 +198,28 @@ func TestStats(t *testing.T) {
 	stats := c.Statistics()
 
 	if stats.Items != 2 {
-		t.Error("Stats items incorrect", stats.Items)
+		t.Errorf("Stats items incorrect, %d", stats.Items)
 	}
 	if stats.ItemsFreq0 != 1 {
-		t.Error("Stats itemsfreq0 incorrect")
+		t.Errorf("Stats itemsfreq0 incorrect, %d", stats.ItemsFreq0)
 	}
 	if stats.Inserts != 5 {
-		t.Error("Stats inserts incorrect")
+		t.Errorf("Stats inserts incorrect, %d", stats.Inserts)
 	}
 	if stats.Hits != 6 {
-		t.Error("Stats hits incorrect")
+		t.Errorf("Stats hits incorrect, %d", stats.Hits)
 	}
 	if stats.Misses != 3 {
-		t.Error("Stats misses incorrect")
+		t.Errorf("Stats misses incorrect, %d", stats.Misses)
 	}
 	if stats.Evictions != 2 {
-		t.Error("Stats evictions incorrect")
+		t.Errorf("Stats evictions incorrect, %d", stats.Evictions)
 	}
 	if stats.Deletes != 1 {
-		t.Error("Stats deletes incorrect")
+		t.Errorf("Stats deletes incorrect, %d", stats.Deletes)
 	}
 	if stats.FreqListLen != 2 {
-		t.Error("Stats freqlistlen incorrect")
+		t.Errorf("Stats freqlistlen incorrect, %d", stats.FreqListLen)
 	}
 }
 
@@ -304,33 +304,49 @@ func TestParallellAccess(t *testing.T) {
 	wg.Wait()
 }
 
-func BenchmarkInsert(b *testing.B) {
-	c := lfucache.New(b.N)
+const cacheSize = 1e6
 
-	keys := make([]string, b.N)
-	for i := 0; i < b.N; i++ {
+func BenchmarkInsert(b *testing.B) {
+	c := lfucache.New(cacheSize)
+
+	keys := make([]string, cacheSize)
+	for i := 0; i < cacheSize; i++ {
 		keys[i] = fmt.Sprintf("k%d", i)
 	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		c.Insert(keys[i], i)
+		c.Insert(keys[i%cacheSize], i)
 	}
 }
 
-func BenchmarkAccess(b *testing.B) {
-	c := lfucache.New(b.N)
+func BenchmarkAccessHit(b *testing.B) {
+	c := lfucache.New(cacheSize)
 
-	keys := make([]string, b.N)
-	for i := 0; i < b.N; i++ {
+	keys := make([]string, cacheSize)
+	for i := 0; i < cacheSize; i++ {
 		keys[i] = fmt.Sprintf("k%d", i)
 	}
-	for i := 0; i < b.N; i++ {
+	for i := 0; i < cacheSize; i++ {
 		c.Insert(keys[i], i)
 	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		c.Access(keys[i])
+		c.Access(keys[i%cacheSize])
+	}
+}
+
+func BenchmarkAccessMiss(b *testing.B) {
+	c := lfucache.New(cacheSize)
+
+	keys := make([]string, cacheSize)
+	for i := 0; i < cacheSize; i++ {
+		keys[i] = fmt.Sprintf("k%d", i)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		c.Access(keys[i%cacheSize])
 	}
 }
