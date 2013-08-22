@@ -3,7 +3,7 @@ package lfucache_test
 import (
 	"fmt"
 	"github.com/calmh/lfucache"
-	// "math/rand"
+	"math/rand"
 	// "runtime"
 	// "sync"
 	"testing"
@@ -386,9 +386,14 @@ func BenchmarkAccessHit(b *testing.B) {
 		c.Insert(keys[i], i)
 	}
 
+	indexes := make([]string, b.N)
+	for i := 0; i < b.N; i++ {
+		indexes[i] = keys[int(rand.Int31n(cacheSize))]
+	}
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		c.Access(keys[i%cacheSize])
+		c.Access(indexes[i])
 	}
 }
 
