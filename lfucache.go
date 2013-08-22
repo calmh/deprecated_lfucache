@@ -80,9 +80,7 @@ func (c *Cache) Insert(key string, value interface{}) {
 		c.evict(c.lfu())
 	}
 
-	n := &node{}
-	n.key = key
-	n.value = value
+	n := &node{key: key, value: value}
 	c.index[key] = n
 	c.moveNodeToFn(n, c.frequencyList)
 	c.length++
@@ -121,7 +119,7 @@ func (c *Cache) Access(key string) (interface{}, bool) {
 	nextUsage := n.parent.usage + 1
 	var nextFn *frequencyNode
 	if n.parent.next == nil || n.parent.next.usage != nextUsage {
-		nextFn = c.newFrequencyNode(nextUsage, n.parent, n.parent.next)
+		nextFn = c.newFrequencyNode(nextUsage, n.parent)
 	} else {
 		nextFn = n.parent.next
 	}
@@ -226,7 +224,6 @@ func (c *Cache) deleteNode(n *node) {
 		fn.nodeList = n.next
 	}
 
-	// Delete empty non-head frequency node
 	if fn.usage != 0 && fn.nodeList == nil {
 		c.deleteFrequencyNode(fn)
 	}
@@ -245,14 +242,15 @@ func (c *Cache) lfu() *node {
 	panic(emptyLfu)
 }
 
-func (c *Cache) newFrequencyNode(usage int, prev, next *frequencyNode) *frequencyNode {
-	fn := &frequencyNode{usage, prev, next, nil}
-	if fn.prev != nil {
-		fn.prev.next = fn
-	}
+func (c *Cache) newFrequencyNode(usage int, parent *frequencyNode) *frequencyNode {
+	fn := &frequencyNode{usage, parent, parent.next, nil}
+
 	if fn.next != nil {
 		fn.next.prev = fn
 	}
+
+	parent.next = fn
+
 	return fn
 }
 
@@ -261,9 +259,7 @@ func (c *Cache) deleteFrequencyNode(fn *frequencyNode) {
 		fn.next.prev = fn.prev
 	}
 
-	if fn.prev != nil {
-		fn.prev.next = fn.next
-	}
+	fn.prev.next = fn.next
 }
 
 func (c *Cache) moveNodeToFn(n *node, fn *frequencyNode) {
@@ -292,6 +288,7 @@ func (c *Cache) moveNodeToFn(n *node, fn *frequencyNode) {
 		n.next = fn.nodeList
 		n.next.prev = n
 	}
+
 	fn.nodeList = n
 }
 
