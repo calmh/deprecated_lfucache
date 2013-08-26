@@ -361,7 +361,7 @@ func TestRandomAccess(t *testing.T) {
 
 const cacheSize = 1e6
 
-func BenchmarkInsert(b *testing.B) {
+func BenchmarkInsertStr(b *testing.B) {
 	c := lfucache.New(cacheSize)
 
 	keys := make([]string, cacheSize)
@@ -375,7 +375,7 @@ func BenchmarkInsert(b *testing.B) {
 	}
 }
 
-func BenchmarkAccessHitBestCase(b *testing.B) {
+func BenchmarkAccessHitBestCaseStr(b *testing.B) {
 	c := lfucache.New(cacheSize)
 
 	keys := make([]string, cacheSize)
@@ -392,7 +392,7 @@ func BenchmarkAccessHitBestCase(b *testing.B) {
 	}
 }
 
-func BenchmarkAccessHitRandom(b *testing.B) {
+func BenchmarkAccessHitRandomStr(b *testing.B) {
 	c := lfucache.New(cacheSize)
 
 	keys := make([]string, cacheSize)
@@ -414,7 +414,25 @@ func BenchmarkAccessHitRandom(b *testing.B) {
 	}
 }
 
-func BenchmarkAccessHitWorstCase(b *testing.B) {
+func BenchmarkAccessHitRandomInt(b *testing.B) {
+	c := lfucache.New(cacheSize)
+
+	for i := 0; i < cacheSize; i++ {
+		c.Insert(i, i)
+	}
+
+	indexes := make([]int, cacheSize)
+	for i := 0; i < cacheSize; i++ {
+		indexes[i] = int(rand.Int31n(cacheSize))
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		c.Access(indexes[i%cacheSize])
+	}
+}
+
+func BenchmarkAccessHitWorstCaseStr(b *testing.B) {
 	c := lfucache.New(cacheSize)
 
 	keys := make([]string, cacheSize)
@@ -431,7 +449,7 @@ func BenchmarkAccessHitWorstCase(b *testing.B) {
 	}
 }
 
-func BenchmarkAccessMiss(b *testing.B) {
+func BenchmarkAccessMissStr(b *testing.B) {
 	c := lfucache.New(cacheSize)
 
 	keys := make([]string, cacheSize)

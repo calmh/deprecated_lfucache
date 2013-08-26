@@ -10,7 +10,7 @@ type Cache struct {
 	capacity      int
 	length        int
 	frequencyList *frequencyNode
-	index         map[string]*node
+	index         map[interface{}]*node
 	evictedChans  list.List
 	stats         Statistics
 }
@@ -34,7 +34,7 @@ type frequencyNode struct {
 }
 
 type node struct {
-	key    string
+	key    interface{}
 	value  interface{}
 	parent *frequencyNode
 	next   *node
@@ -54,7 +54,7 @@ func New(capacity int) *Cache {
 
 	c := Cache{}
 	c.capacity = capacity
-	c.index = make(map[string]*node, capacity)
+	c.index = make(map[interface{}]*node, capacity)
 	c.frequencyList = &frequencyNode{}
 	return &c
 }
@@ -69,7 +69,7 @@ func (c *Cache) Resize(capacity int) {
 
 // Insert inserts an item into the cache. If the key already exists, the
 // existing item is evicted and the new one inserted.
-func (c *Cache) Insert(key string, value interface{}) {
+func (c *Cache) Insert(key interface{}, value interface{}) {
 	c.check()
 
 	if n, ok := c.index[key]; ok {
@@ -91,7 +91,7 @@ func (c *Cache) Insert(key string, value interface{}) {
 
 // Delete deletes an item from the cache and returns true. Does nothing and
 // returns false if the key was not present in the cache.
-func (c *Cache) Delete(key string) bool {
+func (c *Cache) Delete(key interface{}) bool {
 	c.check()
 
 	n, ok := c.index[key]
@@ -107,7 +107,7 @@ func (c *Cache) Delete(key string) bool {
 
 // Access an item in the cache. Returns "value, ok" similar to map indexing.
 // Increases the item's use count.
-func (c *Cache) Access(key string) (interface{}, bool) {
+func (c *Cache) Access(key interface{}) (interface{}, bool) {
 	c.check()
 
 	n, ok := c.index[key]
