@@ -5,7 +5,7 @@ import (
 	"errors"
 )
 
-// Cache is a LFU cache structure.
+// Cache is an LFU cache structure.
 type Cache struct {
 	capacity      int
 	length        int
@@ -25,6 +25,15 @@ type Statistics struct {
 	Deletes     int // Number of Delete()s.
 	FreqListLen int // Current length of frequency list, i.e. the number of distinct usage levels
 }
+
+// The "frequencyNode" and "node" types make up the two levels of linked lists
+// that we use to keep track of the usage per node. It could be argued that we
+// should use the built in list type instead of implementing the linked list
+// structure again directly in the nodes. I tried that and while it results in
+// slightly less code, the extra layer of indirection and resulting type
+// assertions make the code less readable. Also the Access() method becomes
+// several times slower and requires a heap allocation per call. All in all,
+// this was preferable.
 
 type frequencyNode struct {
 	usage    int
@@ -47,7 +56,7 @@ var (
 	emptyLfu      = errors.New("lfu on empty cache")
 )
 
-// New initializes a new LFU Cache structure.
+// New initializes a new LFU Cache structure with the specified capacity.
 func New(capacity int) *Cache {
 	if capacity == 0 {
 		panic(zeroSizeCache)

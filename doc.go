@@ -10,13 +10,11 @@ listeners via channels, and manually evicting all cache items matching a
 criteria. This is useful for example when using the package as a write cache
 for a database, where items must be written to the backing store on eviction.
 
-It is safe to make calls on the cache concurrently from multiple goroutines.
-
 Example
 
 	c := lfucache.Create(1024)
+	c.Access("mykey")       // => nil, false
 	c.Insert("mykey", 2345) // => true
-	c.Access("foo")         // => nil, false
 	c.Access("mykey")       // => interface{}{2345}, true
 	c.Delete("mykey")       // => true
 

@@ -13,13 +13,11 @@ listeners via channels, and manually evicting all cache items matching a
 criteria. This is useful for example when using the package as a write cache for
 a database, where items must be written to the backing store on eviction.
 
-It is safe to make calls on the cache concurrently from multiple goroutines.
-
 ### Example
 
     c := lfucache.Create(1024)
+    c.Access("mykey")       // => nil, false
     c.Insert("mykey", 2345) // => true
-    c.Access("foo")         // => nil, false
     c.Access("mykey")       // => interface{}{2345}, true
     c.Delete("mykey")       // => true
 
@@ -37,19 +35,19 @@ type Cache struct {
 }
 ```
 
-Cache is a LFU cache structure.
+Cache is an LFU cache structure.
 
 #### func  New
 
 ```go
 func New(capacity int) *Cache
 ```
-New initializes a new LFU Cache structure.
+New initializes a new LFU Cache structure with the specified capacity.
 
 #### func (*Cache) Access
 
 ```go
-func (c *Cache) Access(key string) (interface{}, bool)
+func (c *Cache) Access(key interface{}) (interface{}, bool)
 ```
 Access an item in the cache. Returns "value, ok" similar to map indexing.
 Increases the item's use count.
@@ -64,7 +62,7 @@ Cap returns the maximum number of items the cache will hold.
 #### func (*Cache) Delete
 
 ```go
-func (c *Cache) Delete(key string) bool
+func (c *Cache) Delete(key interface{}) bool
 ```
 Delete deletes an item from the cache and returns true. Does nothing and returns
 false if the key was not present in the cache.
@@ -91,7 +89,7 @@ evictions.
 #### func (*Cache) Insert
 
 ```go
-func (c *Cache) Insert(key string, value interface{})
+func (c *Cache) Insert(key interface{}, value interface{})
 ```
 Insert inserts an item into the cache. If the key already exists, the existing
 item is evicted and the new one inserted.
