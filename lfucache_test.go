@@ -67,6 +67,19 @@ func TestExpiry(t *testing.T) {
 	}
 }
 
+func TestExpireOldest(t *testing.T) {
+	c := lfucache.New(3)
+
+	c.Insert("test1", 42)
+	c.Insert("test2", 43)
+	c.Insert("test3", 44)
+	c.Insert("test4", 45) // should remove test1 which is oldest
+
+	if _, ok := c.Access("test1"); ok {
+		t.Error("test1 was not removed")
+	}
+}
+
 func TestResize(t *testing.T) {
 	c := lfucache.New(10)
 

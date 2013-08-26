@@ -31,6 +31,7 @@ type frequencyNode struct {
 	prev     *frequencyNode
 	next     *frequencyNode
 	nodeList *node
+	lastNode *node
 }
 
 type node struct {
@@ -52,11 +53,11 @@ func New(capacity int) *Cache {
 		panic(zeroSizeCache)
 	}
 
-	c := Cache{}
-	c.capacity = capacity
-	c.index = make(map[interface{}]*node, capacity)
-	c.frequencyList = &frequencyNode{}
-	return &c
+	return &Cache{
+		capacity:      capacity,
+		index:         make(map[interface{}]*node, capacity),
+		frequencyList: &frequencyNode{},
+	}
 }
 
 // Resize the cache to a new capacity. When shrinking, items may get evicted.
@@ -223,6 +224,9 @@ func (c *Cache) deleteNode(n *node) {
 	if fn.nodeList == n {
 		fn.nodeList = n.next
 	}
+	if fn.lastNode == n {
+		fn.lastNode = n.prev
+	}
 
 	if fn.usage != 0 && fn.nodeList == nil {
 		c.deleteFrequencyNode(fn)
@@ -243,7 +247,11 @@ func (c *Cache) lfu() *node {
 }
 
 func (c *Cache) newFrequencyNode(usage int, parent *frequencyNode) *frequencyNode {
-	fn := &frequencyNode{usage, parent, parent.next, nil}
+	fn := &frequencyNode{
+		usage: usage,
+		prev:  parent,
+		next:  parent.next,
+	}
 
 	if fn.next != nil {
 		fn.next.prev = fn
@@ -275,6 +283,9 @@ func (c *Cache) moveNodeToFn(n *node, fn *frequencyNode) {
 		if n.parent.nodeList == n {
 			n.parent.nodeList = n.next
 		}
+		if n.parent.lastNode == n {
+			n.parent.lastNode = n.prev
+		}
 		if n.parent.nodeList == nil && n.parent.usage != 0 {
 			c.deleteFrequencyNode(n.parent)
 		}
@@ -284,12 +295,16 @@ func (c *Cache) moveNodeToFn(n *node, fn *frequencyNode) {
 	n.next = nil
 
 	n.parent = fn
-	if fn.nodeList != nil {
-		n.next = fn.nodeList
-		n.next.prev = n
+	if fn.lastNode != nil {
+		n.prev = fn.lastNode
+		n.prev.next = n
 	}
 
-	fn.nodeList = n
+	if fn.nodeList == nil {
+		fn.nodeList = n
+	}
+
+	fn.lastNode = n
 }
 
 func (c *Cache) numFrequencyNodes() int {
