@@ -138,4 +138,4 @@ type Statistics struct {
 }
 ```
 
-Current item counts and operation counters.
+Statistics contains current item counts and operation counters.

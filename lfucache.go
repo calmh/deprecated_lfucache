@@ -15,7 +15,7 @@ type Cache struct {
 	stats         Statistics
 }
 
-// Current item counts and operation counters.
+// Statistics contains current item counts and operation counters.
 type Statistics struct {
 	LenFreq0    int // Number of items at frequency zero, i.e Inserted but not Accessed
 	Inserts     int // Number of Insert()s
@@ -52,14 +52,14 @@ type node struct {
 }
 
 var (
-	zeroSizeCache = errors.New("create zero-sized cache")
-	emptyLfu      = errors.New("lfu on empty cache")
+	errZeroSizeCache = errors.New("create zero-sized cache")
+	errEmptyLFU      = errors.New("lfu on empty cache")
 )
 
 // New initializes a new LFU Cache structure with the specified capacity.
 func New(capacity int) *Cache {
 	if capacity == 0 {
-		panic(zeroSizeCache)
+		panic(errZeroSizeCache)
 	}
 
 	return &Cache{
@@ -252,7 +252,7 @@ func (c *Cache) lfu() *node {
 		}
 	}
 
-	panic(emptyLfu)
+	panic(errEmptyLFU)
 }
 
 func (c *Cache) newFrequencyNode(usage int, parent *frequencyNode) *frequencyNode {
