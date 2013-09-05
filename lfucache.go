@@ -80,7 +80,9 @@ func (c *Cache) Resize(capacity int) {
 // Insert inserts an item into the cache. If the key already exists, the
 // existing item is evicted and the new one inserted.
 func (c *Cache) Insert(key interface{}, value interface{}) {
-	c.check()
+	if debug {
+		c.check()
+	}
 
 	if n, ok := c.index[key]; ok {
 		c.evict(n)
@@ -96,13 +98,17 @@ func (c *Cache) Insert(key interface{}, value interface{}) {
 	c.length++
 	c.stats.Inserts++
 
-	c.check()
+	if debug {
+		c.check()
+	}
 }
 
 // Delete deletes an item from the cache and returns true. Does nothing and
 // returns false if the key was not present in the cache.
 func (c *Cache) Delete(key interface{}) bool {
-	c.check()
+	if debug {
+		c.check()
+	}
 
 	n, ok := c.index[key]
 	if ok {
@@ -110,7 +116,9 @@ func (c *Cache) Delete(key interface{}) bool {
 		c.stats.Deletes++
 	}
 
-	c.check()
+	if debug {
+		c.check()
+	}
 
 	return ok
 }
@@ -118,7 +126,9 @@ func (c *Cache) Delete(key interface{}) bool {
 // Access an item in the cache. Returns "value, ok" similar to map indexing.
 // Increases the item's use count.
 func (c *Cache) Access(key interface{}) (interface{}, bool) {
-	c.check()
+	if debug {
+		c.check()
+	}
 
 	n, ok := c.index[key]
 	if !ok {
@@ -137,7 +147,9 @@ func (c *Cache) Access(key interface{}) (interface{}, bool) {
 	c.moveNodeToFn(n, nextFn)
 	c.stats.Hits++
 
-	c.check()
+	if debug {
+		c.check()
+	}
 
 	return n.value, true
 }
@@ -154,7 +166,9 @@ func (c *Cache) Cap() int {
 
 // Statistics returns the cache statistics.
 func (c *Cache) Statistics() Statistics {
-	c.check()
+	if debug {
+		c.check()
+	}
 
 	c.stats.LenFreq0 = c.items0()
 	c.stats.FreqListLen = c.numFrequencyNodes()
@@ -167,7 +181,9 @@ func (c *Cache) Statistics() Statistics {
 // unregistered using UnregisterEvictions() prior to ceasing reads in order to
 // avoid deadlocking evictions.
 func (c *Cache) Evictions(e chan<- interface{}) {
-	c.check()
+	if debug {
+		c.check()
+	}
 
 	c.evictedChans.PushBack(e)
 }
@@ -176,7 +192,9 @@ func (c *Cache) Evictions(e chan<- interface{}) {
 // notified on item eviction.  Must be called when there is no longer a reader
 // for the channel in question.
 func (c *Cache) UnregisterEvictions(e chan<- interface{}) {
-	c.check()
+	if debug {
+		c.check()
+	}
 
 	for el := c.evictedChans.Front(); el != nil; el = el.Next() {
 		if el.Value.(chan<- interface{}) == e {
@@ -189,7 +207,9 @@ func (c *Cache) UnregisterEvictions(e chan<- interface{}) {
 // EvictIf applies test to each item in the cache and evicts it if the test
 // returns true.  Returns the number of items that was evicted.
 func (c *Cache) EvictIf(test func(interface{}) bool) int {
-	c.check()
+	if debug {
+		c.check()
+	}
 
 	cnt := 0
 	for _, n := range c.index {
@@ -199,7 +219,9 @@ func (c *Cache) EvictIf(test func(interface{}) bool) int {
 		}
 	}
 
-	c.check()
+	if debug {
+		c.check()
+	}
 
 	return cnt
 }
