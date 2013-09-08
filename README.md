@@ -1,6 +1,9 @@
-# lfucache
---
-    import "github.com/calmh/lfucache"
+lfucache [![Build Status](https://drone.io/github.com/calmh/lfucache/status.png)](https://drone.io/github.com/calmh/lfucache/latest)
+========
+
+```go
+import "github.com/calmh/lfucache"
+```
 
 Package lfucache implements an O(1) LFU cache structure.
 
@@ -13,129 +16,23 @@ listeners via channels, and manually evicting all cache items matching a
 criteria. This is useful for example when using the package as a write cache for
 a database, where items must be written to the backing store on eviction.
 
-### Example
-
-    c := lfucache.Create(1024)
-    c.Access("mykey")       // => nil, false
-    c.Insert("mykey", 2345) // => true
-    c.Access("mykey")       // => interface{}{2345}, true
-    c.Delete("mykey")       // => true
-
-
-### License
-
-The MIT license.
-
-## Usage
-
-#### type Cache
+Example
+-------
 
 ```go
-type Cache struct {
-}
+c := lfucache.Create(1024) // The cache will hold up to 1024 items.
+c.Access("mykey")          // => nil, false
+c.Insert("mykey", 2345)    // => true
+v, ok := c.Access("mykey") // => v = interface{}{2345}, ok = true
+c.Delete("mykey")          // => true
 ```
 
-Cache is an LFU cache structure.
+Documentation
+-------------
 
-#### func  New
+http://godoc.org/github.com/calmh/lfucache
 
-```go
-func New(capacity int) *Cache
-```
-New initializes a new LFU Cache structure with the specified capacity.
+License
+-------
 
-#### func (*Cache) Access
-
-```go
-func (c *Cache) Access(key interface{}) (interface{}, bool)
-```
-Access an item in the cache. Returns "value, ok" similar to map indexing.
-Increases the item's use count.
-
-#### func (*Cache) Cap
-
-```go
-func (c *Cache) Cap() int
-```
-Cap returns the maximum number of items the cache will hold.
-
-#### func (*Cache) Delete
-
-```go
-func (c *Cache) Delete(key interface{}) bool
-```
-Delete deletes an item from the cache and returns true. Does nothing and returns
-false if the key was not present in the cache.
-
-#### func (*Cache) EvictIf
-
-```go
-func (c *Cache) EvictIf(test func(interface{}) bool) int
-```
-EvictIf applies test to each item in the cache and evicts it if the test returns
-true. Returns the number of items that was evicted.
-
-#### func (*Cache) Evictions
-
-```go
-func (c *Cache) Evictions(e chan<- interface{})
-```
-Evictions registers a channel used to report items that get evicted from the
-cache. Only items evicted due to LFU or EvictIf() will be sent on the channel,
-not items removed by calling Delete(). The channel must be unregistered using
-UnregisterEvictions() prior to ceasing reads in order to avoid deadlocking
-evictions.
-
-#### func (*Cache) Insert
-
-```go
-func (c *Cache) Insert(key interface{}, value interface{})
-```
-Insert inserts an item into the cache. If the key already exists, the existing
-item is evicted and the new one inserted.
-
-#### func (*Cache) Len
-
-```go
-func (c *Cache) Len() int
-```
-Len returns the number of items currently stored in the cache.
-
-#### func (*Cache) Resize
-
-```go
-func (c *Cache) Resize(capacity int)
-```
-Resize the cache to a new capacity. When shrinking, items may get evicted.
-
-#### func (*Cache) Statistics
-
-```go
-func (c *Cache) Statistics() Statistics
-```
-Statistics returns the cache statistics.
-
-#### func (*Cache) UnregisterEvictions
-
-```go
-func (c *Cache) UnregisterEvictions(e chan<- interface{})
-```
-UnregisterEvictions removes the channel from the list of channels to be notified
-on item eviction. Must be called when there is no longer a reader for the
-channel in question.
-
-#### type Statistics
-
-```go
-type Statistics struct {
-	LenFreq0    int // Number of items at frequency zero, i.e Inserted but not Accessed
-	Inserts     int // Number of Insert()s
-	Hits        int // Number of hits (Access() to item)
-	Misses      int // Number of misses (Access() to non-existant key)
-	Evictions   int // Number of evictions (due to size constraints on Insert(), or EvictIf() calls)
-	Deletes     int // Number of Delete()s.
-	FreqListLen int // Current length of frequency list, i.e. the number of distinct usage levels
-}
-```
-
-Statistics contains current item counts and operation counters.
+MIT
