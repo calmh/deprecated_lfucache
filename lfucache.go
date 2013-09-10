@@ -35,11 +35,11 @@ type Statistics struct {
 // this was preferable.
 
 type frequencyNode struct {
-	usage    int
-	prev     *frequencyNode
-	next     *frequencyNode
-	nodeList *node
-	lastNode *node
+	usage int
+	prev  *frequencyNode
+	next  *frequencyNode
+	head  *node
+	tail  *node
 }
 
 type node struct {
@@ -215,7 +215,7 @@ func (c *Cache) UnregisterEvictions(e chan<- interface{}) {
 }
 
 // EvictIf applies test to each item in the cache and evicts it if the test
-// returns true.  Returns the number of items that was evicted.
+// returns true.  Returns the number of items that were evicted.
 func (c *Cache) EvictIf(test func(interface{}) bool) int {
 	if debug {
 		c.check()
@@ -238,7 +238,7 @@ func (c *Cache) EvictIf(test func(interface{}) bool) int {
 
 func (c *Cache) items0() int {
 	cnt := 0
-	for n := c.frequencyList.nodeList; n != nil; n = n.next {
+	for n := c.frequencyList.head; n != nil; n = n.next {
 		cnt++
 	}
 	return cnt
@@ -262,14 +262,14 @@ func (c *Cache) deleteNode(n *node) {
 	}
 
 	fn := n.parent
-	if fn.nodeList == n {
-		fn.nodeList = n.next
+	if fn.head == n {
+		fn.head = n.next
 	}
-	if fn.lastNode == n {
-		fn.lastNode = n.prev
+	if fn.tail == n {
+		fn.tail = n.prev
 	}
 
-	if fn.usage != 0 && fn.nodeList == nil {
+	if fn.usage != 0 && fn.head == nil {
 		c.deleteFrequencyNode(fn)
 	}
 
@@ -279,8 +279,8 @@ func (c *Cache) deleteNode(n *node) {
 
 func (c *Cache) lfu() *node {
 	for fn := c.frequencyList; fn != nil; fn = fn.next {
-		if fn.nodeList != nil {
-			return fn.nodeList
+		if fn.head != nil {
+			return fn.head
 		}
 	}
 
@@ -321,13 +321,13 @@ func (c *Cache) moveNodeToFn(n *node, fn *frequencyNode) {
 	}
 
 	if n.parent != nil {
-		if n.parent.nodeList == n {
-			n.parent.nodeList = n.next
+		if n.parent.head == n {
+			n.parent.head = n.next
 		}
-		if n.parent.lastNode == n {
-			n.parent.lastNode = n.prev
+		if n.parent.tail == n {
+			n.parent.tail = n.prev
 		}
-		if n.parent.nodeList == nil && n.parent.usage != 0 {
+		if n.parent.head == nil && n.parent.usage != 0 {
 			c.deleteFrequencyNode(n.parent)
 		}
 	}
@@ -336,16 +336,16 @@ func (c *Cache) moveNodeToFn(n *node, fn *frequencyNode) {
 	n.next = nil
 
 	n.parent = fn
-	if fn.lastNode != nil {
-		n.prev = fn.lastNode
+	if fn.tail != nil {
+		n.prev = fn.tail
 		n.prev.next = n
 	}
 
-	if fn.nodeList == nil {
-		fn.nodeList = n
+	if fn.head == nil {
+		fn.head = n
 	}
 
-	fn.lastNode = n
+	fn.tail = n
 }
 
 func (c *Cache) numFrequencyNodes() int {

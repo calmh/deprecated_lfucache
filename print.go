@@ -12,7 +12,7 @@ func (c *Cache) print() {
 
 func (c *Cache) printFreqNode(fn *frequencyNode) {
 	fmt.Printf("- FN %+v\n", fn)
-	for n := fn.nodeList; n != nil; n = n.next {
+	for n := fn.head; n != nil; n = n.next {
 		c.printNode(n)
 	}
 }

@@ -8,7 +8,7 @@ func (c *Cache) check() {
 	count := 0
 	var prevFn *frequencyNode
 	for fn := c.frequencyList; fn != nil; fn = fn.next {
-		if fn.nodeList == nil && fn.usage != 0 {
+		if fn.head == nil && fn.usage != 0 {
 			c.bug("empty non-head frequency node")
 		}
 		if fn.prev != prevFn {
@@ -16,7 +16,7 @@ func (c *Cache) check() {
 		}
 
 		var prev *node
-		for n := fn.nodeList; n != nil; n = n.next {
+		for n := fn.head; n != nil; n = n.next {
 			if n.parent != fn {
 				c.bug("incorrect parent pointer")
 			}
@@ -27,8 +27,8 @@ func (c *Cache) check() {
 			count++
 
 			if n.next == nil {
-				if fn.lastNode != n {
-					c.bug("last pointer not pointing to last node")
+				if fn.tail != n {
+					c.bug("tail pointer not pointing to last node")
 				}
 			}
 		}
