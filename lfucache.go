@@ -39,7 +39,7 @@ type frequencyNode struct {
 	prev  *frequencyNode
 	next  *frequencyNode
 	head  *node
-	tail  *node
+	tail  *node // most recently inserted
 }
 
 type node struct {
@@ -236,14 +236,8 @@ func (c *Cache) EvictIf(test func(interface{}) bool) int {
 	return cnt
 }
 
-func (c *Cache) items0() int {
-	cnt := 0
-	for n := c.frequencyList.head; n != nil; n = n.next {
-		cnt++
-	}
-	return cnt
-}
-
+// evict evicts a node from the cache by removing it from the structure and
+// notifying any interested eviction listeners
 func (c *Cache) evict(n *node) {
 	for i := range c.evictedChans {
 		c.evictedChans[i] <- n.value
@@ -252,6 +246,8 @@ func (c *Cache) evict(n *node) {
 	c.stats.Evictions++
 }
 
+// deleteNode deletes a node from the cache, also deleting the frequency node
+// if it became empty
 func (c *Cache) deleteNode(n *node) {
 	if n.prev != nil {
 		n.prev.next = n.next
@@ -277,6 +273,8 @@ func (c *Cache) deleteNode(n *node) {
 	c.length--
 }
 
+// lfu returns the least frequently used node in the cache, prefering the
+// oldest if there are multiple nodes with the same lowest usage count
 func (c *Cache) lfu() *node {
 	for fn := c.frequencyList; fn != nil; fn = fn.next {
 		if fn.head != nil {
@@ -287,22 +285,24 @@ func (c *Cache) lfu() *node {
 	panic(errEmptyLFU)
 }
 
-func (c *Cache) newFrequencyNode(usage int, parent *frequencyNode) *frequencyNode {
+// newFrequencyNode inserts a new frequency node after the specified prev node
+func (c *Cache) newFrequencyNode(usage int, prev *frequencyNode) *frequencyNode {
 	fn := &frequencyNode{
 		usage: usage,
-		prev:  parent,
-		next:  parent.next,
+		prev:  prev,
+		next:  prev.next,
 	}
 
 	if fn.next != nil {
 		fn.next.prev = fn
 	}
 
-	parent.next = fn
+	prev.next = fn
 
 	return fn
 }
 
+// deleteFrequencyNode removes a new frequency node from the list
 func (c *Cache) deleteFrequencyNode(fn *frequencyNode) {
 	if fn.next != nil {
 		fn.next.prev = fn.prev
@@ -311,6 +311,8 @@ func (c *Cache) deleteFrequencyNode(fn *frequencyNode) {
 	fn.prev.next = fn.next
 }
 
+// moveNodeToFn moves a node to become a child of a frequency node, while
+// properly removing it from any current frequency node
 func (c *Cache) moveNodeToFn(n *node, fn *frequencyNode) {
 	if n.prev != nil {
 		n.prev.next = n.next
@@ -348,10 +350,19 @@ func (c *Cache) moveNodeToFn(n *node, fn *frequencyNode) {
 	fn.tail = n
 }
 
-func (c *Cache) numFrequencyNodes() int {
-	count := 0
+// items0 returns the number of items at the head of the node list (usage
+// count zero)
+func (c *Cache) items0() (count int) {
+	for n := c.frequencyList.head; n != nil; n = n.next {
+		count++
+	}
+	return
+}
+
+// numFrequencyNodes returns the number of frequency nodes in the cache
+func (c *Cache) numFrequencyNodes() (count int) {
 	for fn := c.frequencyList; fn != nil; fn = fn.next {
 		count++
 	}
-	return count
+	return
 }
