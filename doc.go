@@ -13,6 +13,8 @@ and manually evicting cache items matching a certain criteria. This is useful
 for example when using the package as a write cache for a database, where
 items must be written to the backing store on eviction.
 
+The cache structure is not thread safe.
+
 Example:
 
 	c := lfucache.Create(1024) // The cache will hold up to 1024 items.
