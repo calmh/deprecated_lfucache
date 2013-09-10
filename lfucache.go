@@ -1,7 +1,6 @@
 package lfucache
 
 import (
-	"container/list"
 	"errors"
 )
 
@@ -11,7 +10,7 @@ type Cache struct {
 	length        int
 	frequencyList *frequencyNode
 	index         map[interface{}]*node
-	evictedChans  list.List
+	evictedChans  []chan<- interface{}
 	stats         Statistics
 }
 
@@ -185,22 +184,31 @@ func (c *Cache) Evictions(e chan<- interface{}) {
 		c.check()
 	}
 
-	c.evictedChans.PushBack(e)
+	c.evictedChans = append(c.evictedChans, e)
 }
 
 // UnregisterEvictions removes the channel from the list of channels to be
-// notified on item eviction.  Must be called when there is no longer a reader
+// notified on item eviction. Must be called when there is no longer a reader
 // for the channel in question.
 func (c *Cache) UnregisterEvictions(e chan<- interface{}) {
 	if debug {
 		c.check()
 	}
 
-	for el := c.evictedChans.Front(); el != nil; el = el.Next() {
-		if el.Value.(chan<- interface{}) == e {
-			c.evictedChans.Remove(el)
-			return
+	var i int
+	var found bool
+
+	for i = range c.evictedChans {
+		if c.evictedChans[i] == e {
+			found = true
+			break
 		}
+	}
+
+	if found {
+		copy(c.evictedChans[i:], c.evictedChans[i+1:])
+		c.evictedChans[len(c.evictedChans)-1] = nil
+		c.evictedChans = c.evictedChans[:len(c.evictedChans)-1]
 	}
 }
 
@@ -235,8 +243,8 @@ func (c *Cache) items0() int {
 }
 
 func (c *Cache) evict(n *node) {
-	for c := c.evictedChans.Front(); c != nil; c = c.Next() {
-		c.Value.(chan<- interface{}) <- n.value
+	for i := range c.evictedChans {
+		c.evictedChans[i] <- n.value
 	}
 	c.deleteNode(n)
 	c.stats.Evictions++

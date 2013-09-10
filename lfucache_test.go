@@ -14,6 +14,14 @@ func TestInstantiateCache(t *testing.T) {
 	_ = lfucache.New(42)
 }
 
+func TestInstantiateZero(t *testing.T) {
+	defer func() {
+		recover()
+	}()
+	_ = lfucache.New(0)
+	t.Error("Should not be able to instantiate zero-sized cache")
+}
+
 func TestInsertAccess(t *testing.T) {
 	c := lfucache.New(10)
 
@@ -191,6 +199,10 @@ func TestEvictionsChannel(t *testing.T) {
 
 	exp := make(chan interface{})
 	c.Evictions(exp)
+
+	// Unregister an unregistered channel. Should be a nop.
+	unregisteredExp := make(chan interface{})
+	c.UnregisterEvictions(unregisteredExp)
 
 	start := make(chan bool)
 	done := make(chan bool)
