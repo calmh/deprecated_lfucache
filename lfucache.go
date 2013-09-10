@@ -77,7 +77,9 @@ func (c *Cache) Resize(capacity int) {
 }
 
 // Insert inserts an item into the cache. If the key already exists, the
-// existing item is evicted and the new one inserted.
+// existing item is evicted and the new one inserted. The key type is
+// restricted to those acceptable as map keys
+// (http://golang.org/ref/spec#Map_types).
 func (c *Cache) Insert(key interface{}, value interface{}) {
 	if debug {
 		c.check()
