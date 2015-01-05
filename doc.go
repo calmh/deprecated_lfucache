@@ -2,6 +2,10 @@
 
 Package lfucache implements an O(1) LFU (Least Frequenty Used) cache.
 
+**DEPRECATION WARNING**
+
+This package is unmaintained and probably not what you're looking for.
+
 This structure is described in the paper "An O(1) algorithm for implementing
 the LFU cache eviction scheme" by  K. Shah, A. Mitra and D.  Matani. It is
 based on two levels of doubly linked lists and gives O(1) insert, access and

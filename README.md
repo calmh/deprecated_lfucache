@@ -1,3 +1,6 @@
+> **DEPRECATION WARNING**
+> This package is unmaintained and probably not what you're looking for.
+
 lfucache [![Build Status](https://drone.io/github.com/calmh/lfucache/status.png)](https://drone.io/github.com/calmh/lfucache/latest)
 ========
 
