@@ -1,4 +1,4 @@
-package lfucache
+package lfucache // import "github.com/calmh/deprecated_lfucache"
 
 import (
 	"errors"
